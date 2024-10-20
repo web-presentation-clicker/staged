@@ -1,0 +1,66 @@
+# sample config file. it's shared between the session server and the uwsgi app
+# todo: update this
+
+# ===================== common =====================
+
+# unix socket that the session server listens from. (requires restart)
+session_server_socket: '/run/staged/session.socket'
+# timeout in seconds for communications between the session server and the uwsgi app.
+# this should be low, since the session server is supposed to be fast.
+session_server_timeout: 5
+
+# use ansi colors in logs.
+ansi_logging: true
+
+# log level
+# 5 = debug
+# 4 = verbose
+# 3 = informational
+# 2 = warnings
+# 1 = errors only
+# 0 = just errors caused by potential bugs
+# -1 = silence
+log_level: 3
+
+
+# ===================== uwsgi app =====================
+
+# connection pool parameters.
+# the uwsgi app will pool a fixed number of connections per process. this is since
+# the point of the uwsgi app is to handle large numbers of open sockets, since the
+# monolithic session server cannot handle that.
+# the two pool types:
+# - senders:   these send events to the session server like session creation and clicks.
+#              the uwsgi app queues these per process.
+# - listeners: these listen to events from the session server, like clicks and session expiration.
+#              the session server queues these.
+#
+# keep in mind that the total number of connections is multiplied by the number of processes:
+#     n_connections = (n_senders + n_listeners) * n_uwsgi_processes
+sender_threads: 4
+listener_threads: 4
+
+
+# ===================== session server =====================
+
+# interval in seconds at which the maintenance thread should execute.
+# the maintenance thread is currently just responsible for expiring inactive sessions.
+maintenance_interval: 30
+
+# interval in seconds at which to ping the uwsgi app to ensure the client is still connected.
+# if this ping succeeds, the session activity timestamp is updated.
+# too small of a value will cause unnecessary load,
+# too large of a value may reduce the inactivity grace period.
+ping_interval: 30
+
+# time threshold in seconds from the last contact with the presenting device at which the maintenance thread will
+# consider a session inactive and expire it.
+# too low may be annoying for users,
+# too high may enable denial of service attacks by making a bunch of sessions
+session_timeout: 300
+
+# export metrics via prometheus (requires restart)
+prometheus:
+  export: True
+  port: 8000
+  addr: 127.0.0.1

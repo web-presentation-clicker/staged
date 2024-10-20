@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+    <body>
+        <table>
+            <tr>
+                <th>uuid</th>
+                <td id="uuid"></td>
+            </tr>
+            <tr>
+                <th>uuid64</th>
+                <td id="uuid64"></td>
+            </tr>
+            <tr>
+                <th>clicker link</th>
+                <td id="clickerlnk"></td>
+            </tr>
+            <tr>
+                <th>clicker debug</th>
+                <td id="clickerdbg"></td>
+            </tr>
+            <tr>
+                <th>state</th>
+                <td id="state">init</td>
+            </tr>
+        </table>
+
+        <button onclick="new_session()">new session</button>
+        <button onclick="resume()">resume session</button>
+        <button onclick="ws.close()">kill sock</button>
+
+        <h4>event log</h4>
+        <ul id="log"></ul>
+    </body>
+
+    <script type="text/javascript">
+        
+        function decode_hex_digit(d) {
+            if ((d & 0xF0) == 0x30) { // num (0011xxxx)
+                let num = d & 0x0F;
+                if (num < 10) return num;
+            } else if ((d & 0xD8) == 0x40) { // letter (01x00xxx)
+                let num = (d & 0x07) + 9;
+                if (num < 16 && num > 9) return num;
+            }
+            throw 'Invalid hex digit';
+        }
+
+        function decode_uuid(uuid) {            
+            let hex = uuid.replaceAll('-', '');
+            if (hex.length != 32) throw 'invalid number of digits in uuid';
+            let bytes = new Uint8Array(16);
+            for (let i = 0; i < 16; i++) {
+                let high = decode_hex_digit(hex.charCodeAt(i*2));
+                let low = decode_hex_digit(hex.charCodeAt(i*2+1));
+                bytes[i] = (high << 4) + low;
+            }
+            return bytes;
+        }
+
+        // I read the rfc and did the thing with the thing. no, I'm not importing a library just for this.
+        function encode_b64(bytes) {
+            const b64Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+            let out = '';
+            let bptr = 0;
+            let radBuff = bytes[bptr++];
+            let radBuffSize = 8;
+            while (bptr < bytes.length) {
+                if (radBuffSize < 6 && bptr < bytes.length) {
+                    radBuff = radBuff << 8;
+                    radBuff += bytes[bptr++];
+                    radBuffSize += 8;
+                }
+                let d = radBuff >> (radBuffSize - 6);
+                out += b64Alphabet.charAt(d);
+                radBuffSize -= 6;
+                radBuff -= d << radBuffSize;
+            }
+            if (radBuffSize > 0) {
+                d = radBuff << 6 - radBuffSize;
+                out += b64Alphabet.charAt(d);
+            }
+            // padding is not needed
+            return out;
+        }
+
+
+        // socket
+        let ws = null
+        let uuid_r = null;
+        let uuid_b = null;
+        let uuid_64 = null;
+
+        // devel
+        const baseURL = 'http://localhost:6969';
+        const baseWSURL = 'ws://localhost:6969';
+
+        // production
+        // const baseURL = 'https://on-stage.click';
+        // const baseWSURL = 'wss://on-stage.click';
+
+        // todo: a lot of this could probably be commonized
+
+        // message event handler after connection is established, handles events
+        onmessage_connected = e => {
+            console.log(e.data);
+            if (e.data.startsWith('ERR: ')) {
+                let error = e.data.substr(5);
+                document.querySelector('#state').innerHTML = 'server error';
+                console.log('there was a problem: ' + error);
+                alert(error);
+            } else if (e.data == 'hello') {
+                document.querySelector('#state').innerHTML = 'ready.';
+                const log = document.querySelector('#log');
+                log.innerHTML = `<li style="background-color: #F005">${e.data}</li>` + log.innerHTML;
+
+            } else if (e.data == 'next_slide') {
+                document.querySelector('#state').innerHTML = 'ready.';
+                const log = document.querySelector('#log');
+                log.innerHTML = `<li style="background-color: #0F05">${e.data}</li>` + log.innerHTML;
+
+            } else if (e.data == 'prev_slide') {
+                document.querySelector('#state').innerHTML = 'ready.';
+                const log = document.querySelector('#log');
+                log.innerHTML = `<li style="background-color: #00F5">${e.data}</li>` + log.innerHTML;
+
+            } else {
+                console.log('unknown event from server: ' + e.data);
+                alert('unknown event from server: ' + e.data);
+            }
+        }
+
+        // message event handler while creating a new session
+        onmessage_init = e => {
+            console.log(e.data);
+            if (e.data.startsWith('ERR: ')) {
+                let error = e.data.substr(5);
+                document.querySelector('#state').innerHTML = 'server error';
+                console.log('there was a problem: ' + error);
+                alert(error);
+                ws.close();
+            } else if (e.data.startsWith('uuid: ')) {
+                uuid_r = e.data.substr(6);
+                uuid_b = decode_uuid(uuid_r);
+                uuid_64 = encode_b64(uuid_b);
+                document.querySelector('#uuid64').innerHTML = uuid_64;
+                document.querySelector('#clickerlnk').innerHTML = `<a target="_blank" href="${baseURL}/${uuid_64}">${baseURL}/${uuid_64}</a>`;
+                document.querySelector('#clickerdbg').innerHTML = `<a target="_blank" href="clicker.html?s=${uuid_r}">clicker.html?s=${uuid_r}</a>`;
+
+                console.log('new session get! ' + uuid_r);
+                document.querySelector('#state').innerHTML = 'session connected';
+                document.querySelector('#uuid').innerHTML = uuid_r;
+
+                ws.onmessage = onmessage_connected;
+
+            } else {
+                console.log('unknown event from server: ' + e.data);
+                alert('unknown event from server: ' + e.data);
+                ws.close();
+            }
+        };
+
+        // message event handler when resuming a session
+        onmessage_resume = e => {
+            console.log(e.data);
+            if (e.data.startsWith('ERR: ')) {
+                let error = e.data.substr(5);
+                document.querySelector('#state').innerHTML = 'server error';
+                console.log('there was a problem: ' + error);
+                alert(error);
+                ws.close();
+            } else if (e.data == 'resumed') {
+                uuid_b = decode_uuid(uuid_r);
+                uuid_64 = encode_b64(uuid_b);
+                document.querySelector('#uuid64').innerHTML = uuid_64;
+                document.querySelector('#clickerlnk').innerHTML = `<a target="_blank" href="${baseURL}/${uuid_64}">${baseURL}/${uuid_64}</a>`;
+                document.querySelector('#clickerdbg').innerHTML = `<a target="_blank" href="clicker.html?s=${uuid_r}">clicker.html?s=${uuid_r}</a>`;
+
+                console.log('new session get! ' + uuid_r);
+                document.querySelector('#state').innerHTML = 'session connected';
+                document.querySelector('#uuid').innerHTML = uuid_r;
+
+                ws.onmessage = onmessage_connected;
+
+            } else {
+                console.log('unknown event from server: ' + e.data);
+                alert('unknown event from server: ' + e.data);
+                ws.close();
+            }
+        };
+
+        
+        // onopen when creating new session
+        onopen_init = () => {
+            console.log('opened');
+            document.querySelector('#state').innerHTML = 'handshake';
+            ws.send('v1');
+            ws.send('new');
+        };
+
+        // onopen when resuming session
+        onopen_resume = () => {
+            console.log('opened');
+            document.querySelector('#state').innerHTML = 'handshake';
+            ws.send('v1');
+            ws.send('resume: ' + uuid_r);
+        };
+
+
+        // normal onerror and onclose
+        onerror_init = e => {
+            console.log(e);
+            document.querySelector('#state').innerHTML += '<br>err';
+            alert("error, see js console");
+        };
+
+        onclose_init = e => {
+            console.log('death');
+            document.querySelector('#state').innerHTML = 'conn lost';
+            alert("connection died");
+            
+            // if (uuid_r != null) {
+            //     resume(uuid_r);
+            // }
+        };
+
+
+        function new_session() {
+            if (ws != null) ws.close();
+            ws = new WebSocket(baseWSURL + "/api/v1/ws");
+            ws.onopen = onopen_init;
+            ws.onmessage = onmessage_init;
+            ws.onerror = onerror_init;
+            ws.onclose = onclose_init;
+        }
+
+        function resume() {
+            if (ws != null) ws.close();
+            ws = new WebSocket(baseWSURL + "/api/v1/ws");
+            ws.onopen = onopen_resume;
+            ws.onmessage = onmessage_resume;
+            ws.onerror = onerror_init;
+            ws.onclose = onclose_init;
+        }
+
+
+    </script>
+</html>

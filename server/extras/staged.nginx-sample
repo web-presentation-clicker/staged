@@ -1,0 +1,15 @@
+server {
+    listen [::]:80;
+    listen 80;
+
+    server_name your-domain.tld;
+
+    # staged running on unix socket
+    location /api {
+        uwsgi_pass unix:///run/staged/staged.socket;
+        include uwsgi_params;
+    }
+
+    access_log /var/log/nginx/staged.access.log;
+    error_log  /var/log/nginx/staged.error.log;
+}

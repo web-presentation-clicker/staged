@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+    <body>
+        <button id="prev" disabled="true" onclick="prev_slide()">previous slide</button><button id="next" disabled="true" onclick="next_slide()">next slide</button>
+        <br><br><br>
+        <button id="spam" onclick="setInterval(next_slide, 100)">spam (+10 rq/s)</button>
+        <button id="recon" onclick="ping()">reconnect</button>
+        <div id="msg"></div>
+    </body>
+
+    <script type="text/javascript">
+        const params = new URLSearchParams(location.search);
+        const uuid_r = params.get('s');
+        const prev = document.getElementById('prev');
+        const next = document.getElementById('next');
+        const recon = document.getElementById('recon');
+        const controls = [prev, next];
+
+        const baseURL = 'http://localhost:6969';
+        function request(method, path, onLoad) {
+            r = new XMLHttpRequest();
+            r.onreadystatechange = e => { if (e.target.readyState == 4) onLoad(e) };
+            r.open(method, baseURL + path, true);
+            r.setRequestHeader('Authorization', uuid_r);
+            r.send();
+        }
+
+        function show(text) {
+            msg = document.getElementById('msg');
+            msg.innerHTML = text;
+        }
+
+        const genericHandler = e => {
+                let code = e.target.status;
+                if (code == 200) {
+                    // unlock controls
+                    show('connected to presenting device');
+                    controls.forEach(c => c.disabled = false);
+                    recon.disabled = true;
+                } else if (code == 401) {
+                    show('sorry, presentation session has expired due to inactivity');
+                    clearInterval(checkInterval);   // no use checking
+                    controls.forEach(c => c.disabled = true);
+                    recon.disabled = false;
+                } else if (code == 406) {
+                    // presenting device is offline
+                    show('presenting device is not connected');
+                    controls.forEach(c => c.disabled = true);
+                    recon.disabled = false;
+                } else if (code > 500 && code != 504) {
+                    show('service unavailable, please try again later');
+                    controls.forEach(c => c.disabled = true);
+                    recon.disabled = false;
+                } else if (code == 0) {
+                    show('unable to contact server');
+                    controls.forEach(c => c.disabled = true);
+                    recon.disabled = false;
+                } else {
+                    console.log(code);
+                    console.log(e);
+                    show('unknown error');
+                }
+            }
+
+        function ping() {
+            request('GET', '/api/v1/session/hello', genericHandler);
+        }
+
+        function next_slide() {
+            controls.forEach(c => c.disabled = true);
+            request('GET', '/api/v1/session/next-slide', genericHandler);
+        }
+
+        function prev_slide() {
+            controls.forEach(c => c.disabled = true);
+            request('GET', '/api/v1/session/prev-slide', genericHandler);
+        }
+
+        // run when page is loaded, tells presenting device to stop showing the qr code
+        ping();
+
+        // periodically check for availability
+        let checkInterval = setInterval(ping, 20000);
+
+    </script>
+</html>

@@ -1,0 +1,28 @@
+[Unit]
+Description=staged server
+After=network-online.target
+
+[Service]
+User=staged
+Group=staged
+RuntimeDirectory=staged
+RuntimeDirectoryPreserve=yes
+WorkingDirectory=/opt/staged/app
+ExecStart=/opt/staged/venv/bin/uwsgi --ini /opt/staged/staged.ini
+Restart=on-failure
+# todo: this doesn't kill correctly
+KillMode=process
+
+# increase file descriptor limit
+LimitNOFILE=2000000:9000000
+
+# hardening
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+PrivateDevices=true
+NoNewPrivileges=true
+CapabilityBoundingSet=~CAP_SYS_ADMIN
+
+[Install]
+WantedBy=multi-user.target
