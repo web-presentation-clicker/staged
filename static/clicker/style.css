@@ -59,8 +59,16 @@ body {
     padding-right: 3vw;
 }
 
+@media (orientation: landscape) {
+    .controls {
+        flex-direction: row;
+    }
+    
+}
+
 .controls .spacer {
-    height: 3vw
+    height: 3vw;
+    width: 3vw;
 }
 
 .title {
