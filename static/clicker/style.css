@@ -15,11 +15,11 @@ body {
     padding-right: 3vw;
 }
 
-.next {
+#next {
     background-image: url("/img/arrow-right.svg");
 }
 
-.previous {
+#previous {
     background-image: url("/img/arrow-left.svg");
 }
 
