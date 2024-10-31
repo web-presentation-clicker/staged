@@ -1,6 +1,15 @@
 
 body {
+    display: flex;
+    flex-direction: column;
+
     background-color: #000;
+    color: #FFF;
+    font-family: sans-serif;
+
+    height: 100vh;
+    width: 100vw;
+    
     margin: 0px;
 }
 
@@ -9,13 +18,11 @@ body {
     background-color: #222;
     border-radius: 25px;
     cursor: pointer;
-    margin-top: 3vw;
 }
 
 .button:active {
     background-color: #333;
 }
-
 
 .controls {
     display: flex;
@@ -23,11 +30,30 @@ body {
 
     max-width: 94vw;
     width: 100%;
-    height: calc(100vh - 3vw);
+    flex-grow: 1;
 
-    margin: 0px;
-
+    padding-top: 3vw;
+    padding-bottom: 3vw;
     padding-left: 3vw;
     padding-right: 3vw;
+}
+
+.controls .spacer {
+    height: 3vw
+}
+
+.title {
+    flex-shrink: 1;
+}
+
+.title h1 {
+    font-size: 1.4rem;
+
+    font-weight: 500;
+
+    margin-left: 3vw;
+    margin-right: 3vw;
+    margin-top: 1rem;
+    margin-bottom: 1rem;
 }
 
