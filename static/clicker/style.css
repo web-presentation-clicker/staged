@@ -4,7 +4,7 @@ body {
     flex-direction: column;
 
     background-color: #000;
-    color: #FFF;
+    color: #505054;
     font-family: sans-serif;
 
     height: 100vh;
@@ -13,17 +13,36 @@ body {
     margin: 0px;
 }
 
+.next {
+    background-image: url("/img/arrow-right.svg");
+}
+
+.previous {
+    background-image: url("/img/arrow-left.svg");
+}
+
 .button {
     animation: pulse2 .5s ease-in 0s 1 reverse backwards;
+    background-size: 20%;
+    background-position: center;
+    background-repeat: no-repeat;
     flex-grow: 1;
-    background-color: #202020;
+    background-color: #202024;
     border-radius: 25px;
     cursor: pointer;
+    user-select: none;
 }
 
 .button:active {
     animation: pulse .05s ease-out 0s 1 normal forwards;
     background-color: #333;
+}
+
+.button > span {
+    height: inherit;
+    vertical-align: middle;
+    text-align: center;
+    font-size: large;
 }
 
 .controls {
@@ -61,18 +80,18 @@ body {
 
 @keyframes pulse {
     0% {
-        background-color: #202020;
+        background-color: #202025;
     }
     100% {
-        background-color: #333;
+        background-color: #334;
     }
 }
 
 @keyframes pulse2 {
     0% {
-        background-color: #202020;
+        background-color: #202025;
     }
     100% {
-        background-color: #333;
+        background-color: #334;
     }
 }
