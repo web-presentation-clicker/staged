@@ -87,6 +87,7 @@ function close_modal() {
 
 }
 
+// todo: make connecting/reconnecting modal
 function show_fullscreen_modal() {
 
     modal.title.innerText = 'Fullscreen Mode';
@@ -107,7 +108,7 @@ function show_fullscreen_modal() {
 }
 
 
-show_fullscreen_modal();
+// show_fullscreen_modal();
 
 if (uuid_r == null) {
     // there is no uuid parameter
