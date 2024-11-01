@@ -1,16 +1,21 @@
 
 body {
-    display: flex;
-    flex-direction: column;
-
     background-color: #000;
     color: #707074;
     font-family: sans-serif;
 
-    height: 100vh;
-    width: 94vw;
-    
     margin: 0px;
+    position: fixed;
+    height: 100%;
+}
+
+#clicker_ui {
+    display: flex;
+    flex-direction: column;
+
+    height: 100%;
+    width: 94vw;
+
     padding-left: 3vw;
     padding-right: 3vw;
 }
@@ -24,11 +29,7 @@ body {
 }
 
 .button {
-    animation: pulse2 .5s ease-in 0s 1 reverse backwards;
-    background-size: 20%;
-    background-position: center;
-    background-repeat: no-repeat;
-    flex-grow: 1;
+    animation: pulse-inactive .5s ease-in 0s 1 normal forwards;
     background-color: #202024;
     border-radius: 25px;
     cursor: pointer;
@@ -37,7 +38,7 @@ body {
 }
 
 .button:active {
-    animation: pulse .05s ease-out 0s 1 normal forwards;
+    animation: pulse-active .05s ease-out 0s 1 normal forwards;
     background-color: #333;
 }
 
@@ -51,6 +52,13 @@ body {
 
     padding-top: 3vw;
     padding-bottom: 3vw;
+}
+
+.controls > .button {
+    background-size: 20%;
+    background-position: center;
+    background-repeat: no-repeat;
+    flex-grow: 1;
 }
 
 @media (orientation: landscape) {
@@ -77,20 +85,102 @@ body {
     margin-bottom: 1rem;
 }
 
-@keyframes pulse {
-    0% {
-        background-color: #202025;
-    }
-    100% {
+#modal {
+    position: fixed;
+    overflow: auto;
+
+    background-color: #000d;
+    color: #c0c0c4;
+
+    top: 0;
+    left: 0;
+
+    width: 100vw;
+    height: 100%;
+}
+
+.hidden {
+    visibility: hidden;
+    animation: fade-out 0.14s ease-out 0ms 1 normal forwards;
+    transition: visibility 0s 0.14s;
+}
+
+.visible {
+    visibility: visible;
+    animation: fade-in 0.14s ease-out 0ms 1 normal forwards;
+}
+
+#m_title {
+    font-size: 2.0rem;
+    margin-top: 1.4rem;
+    margin-bottom: 1.4rem;
+}
+
+.inner-modal {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+
+    margin-left: auto;
+    margin-right: auto;
+
+    width: 90vw;
+    max-width: 50rem;
+    min-height: 100%;
+}
+
+#modal .button {
+    border-radius: 15px;
+    
+    margin-top: 0.5rem;
+    margin-bottom: 0.5rem;
+
+    padding: 1rem;
+}
+
+#m_nah {
+    animation: none;
+    background-color: #0000;
+}
+
+.modal-actions {
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+}
+
+@keyframes pulse-active {
+    to {
         background-color: #334;
     }
 }
 
-@keyframes pulse2 {
-    0% {
-        background-color: #202025;
-    }
-    100% {
+@keyframes pulse-inactive {
+    from {
         background-color: #334;
+    }
+}
+
+@keyframes defocus {
+    to {
+        filter: blur(5px);
+    }
+}
+
+@keyframes focus {
+    from {
+        filter: blur(5px);
+    }
+}
+
+
+@keyframes fade-in {
+    from {
+        opacity: 0%;
+    }
+}
+
+@keyframes fade-out {
+    to {
+        opacity: 0%;
     }
 }

@@ -69,11 +69,52 @@ function prev_slide() {
 }
 
 
+// modal
+const body = document.querySelector('body');
+const clicker_ui = document.getElementById('clicker_ui');
+const modal = {
+    modal:   document.getElementById('modal'),
+    title:   document.getElementById('m_title'),
+    message: document.getElementById('m_message'),
+    ok:      document.getElementById('m_ok'),
+    nah:     document.getElementById('m_nah'),
+}
+
+function close_modal() {
+    modal.modal.classList = ['hidden'];
+    body.style.overflow = 'auto';
+    clicker_ui.style.animation = 'focus 0.2s ease-out 0ms 1 normal forwards';
+
+}
+
+function show_fullscreen_modal() {
+
+    modal.title.innerText = 'Fullscreen Mode';
+    modal.message.innerText = 'For a better experience, enter fullscreen mode.';
+    modal.ok.innerText = 'Enter fullscreen mode';
+    modal.nah.innerText = 'No, thanks';
+
+    modal.ok.onclick = (e) => {
+        body.requestFullscreen();
+        close_modal();
+    };
+
+    modal.nah.onclick = (e) => close_modal();
+
+    clicker_ui.style.animation = 'defocus 0.2s ease-out 0ms 1 normal forwards';
+    modal.modal.classList = ['visible'];
+    body.style.overflow = 'hidden';
+}
+
+
+show_fullscreen_modal();
+
 if (uuid_r == null) {
     // there is no uuid parameter
     connection.textContent = "no session: Please download the extension on your computer and scan the QR code.";
     controls.forEach(c => c.disabled = true);
 } else {
+
     // run when page is loaded, tells presenting device to stop showing the qr code
     connection.textContent = "connecting...";
     ping();

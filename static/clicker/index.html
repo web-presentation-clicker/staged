@@ -7,12 +7,27 @@
     <link rel="stylesheet" href="/clicker/style.css">
 </head>
 <body>
-    <div class="title"><h1>on-stage.click</h1></div>
-    <div id="connection"><noscript>please enable javascript</noscript></div>
-    <div class="controls">
-        <div id="previous" class="button" title="previous slide"></div>
-        <div class="spacer"></div>
-        <div id="next" class="button" title="next slide"></div>
+    <div id="clicker_ui">
+        <div class="title"><h1>on-stage.click</h1></div>
+        <div id="connection"><noscript>please enable javascript</noscript></div>
+        <div class="controls">
+            <div id="previous" class="button" title="previous slide"></div>
+            <div class="spacer"></div>
+            <div id="next" class="button" title="next slide"></div>
+        </div>
+    </div>
+
+    <div id="modal" class="hidden">
+        <div class="inner-modal">
+            <div>
+                <div id="m_title"></div>
+                <div id="m_message"></div>
+            </div>
+            <div class="modal-actions">
+                <div id="m_ok" class="button"></div>
+                <div id="m_nah" class="button"></div>
+            </div>
+        </div>
     </div>
 
     <script src="/clicker/clicker.js"></script>
