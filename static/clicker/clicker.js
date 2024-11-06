@@ -5,8 +5,8 @@ const params = new URLSearchParams(location.search);
 const uuid_r = params.get('s');
 const prev = document.getElementById('previous');
 const next = document.getElementById('next');
-// const recon = document.getElementById('recon');
 const controls = [prev, next];
+let checkInterval;
 
 function request(method, path, onLoad) {
     r = new XMLHttpRequest();
@@ -26,22 +26,15 @@ const genericHandler = e => {
             clearInterval(checkInterval);   // no use checking
         } else if (code == 406) {
             // presenting device is offline
-            show_blocking_modal(false, 'Computer Offline', 'Could not contact your computer.');
-            controls.forEach(c => c.disabled = true);
-            // todo: show retry button
+            show_blocking_modal(false, 'Computer Offline', 'Could not contact your computer.', true);
         } else if (code > 500 && code != 504) {
-            show_blocking_modal(false, 'Temorarily Unavailable', 'Please try again later.');
-            controls.forEach(c => c.disabled = true);
-            // todo: show retry button
+            show_blocking_modal(false, 'Temorarily Unavailable', 'Please try again later.', true);
         } else if (code == 0) {
-            show_blocking_modal(false, 'Offline', 'Unable to contact server.');
-            controls.forEach(c => c.disabled = true);
-            // todo: show retry button
+            show_blocking_modal(false, 'Offline', 'Unable to contact server.', true);
         } else {
             console.log(code);
             console.log(e);
-            show_blocking_modal(false, 'Temorarily Unavailable', 'Unknown error.');
-            // todo: show retry button
+            show_blocking_modal(false, 'Temorarily Unavailable', 'Unknown error.', true);
         }
     }
 
@@ -74,6 +67,7 @@ const modal = {
     center_title: document.getElementById('m_center_title'),
     center_msg:   document.getElementById('m_center_msg'),
     wheel:        document.getElementById('m_wheel'),
+    reconnect:    document.getElementById('m_reconnect'),
 }
 
 function close_modal() {
@@ -83,7 +77,7 @@ function close_modal() {
 
 }
 
-function show_blocking_modal(loading, title, message=null) {
+function show_blocking_modal(loading, title, message=null, show_reconnect=false) {
     modal.prompt.style.display = 'none';
     modal.block.style.display = 'block';
     modal.center_title.innerText = title;
@@ -92,6 +86,16 @@ function show_blocking_modal(loading, title, message=null) {
     modal.center_msg.display = message != null ? 'block' : 'none';
     
     modal.wheel.style.display = loading ? 'block' : 'none';
+
+    if (show_reconnect) {
+        modal.reconnect.onclick = (e) => {
+            show_blocking_modal(true, 'Reconnecting...');
+            ping();
+        };
+        modal.reconnect.style.display = 'block';
+    } else {
+        modal.reconnect.style.display = 'none';
+    }
 
     clicker_ui.style.animation = 'defocus 0.2s ease-out 0ms 1 normal forwards';
     modal.modal.classList = ['visible'];
@@ -123,7 +127,7 @@ function show_fullscreen_modal() {
 
 if (uuid_r == null) {
     // there is no uuid parameter
-    show_blocking_modal(false, 'no Session', 'Please download the extension on your computer and scan the QR code.');
+    show_blocking_modal(false, 'No Session', 'Please download the extension on your computer and scan the QR code.');
     controls.forEach(c => c.disabled = true);
 } else {
 
@@ -135,5 +139,5 @@ if (uuid_r == null) {
     prev.onclick = prev_slide;
 
     // periodically check for availability
-    let checkInterval = setInterval(ping, 20000);
+    checkInterval = setInterval(ping, 20000);
 }
