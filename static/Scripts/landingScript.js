@@ -22,4 +22,10 @@ function setDownloadLink(){
     }
 }
 
+// Toggles menu visibility
+function toggleMenu(){
+    let navbar = document.getElementById("navbar-container");
+    navbar.classList.toggle("show");
+}
+
 window.onload = setDownloadLink;
