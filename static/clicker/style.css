@@ -14,10 +14,10 @@ body {
     flex-direction: column;
 
     height: 100%;
-    width: 94vw;
+    width: calc(100vw - min(6vw, 6vh));
 
-    padding-left: 3vw;
-    padding-right: 3vw;
+    padding-left: min(3vw, 3vh);
+    padding-right: min(3vw, 3vh);
 }
 
 #next {
@@ -48,12 +48,11 @@ body {
     display: flex;
     flex-direction: column;
 
-    max-width: 94vw;
     width: 100%;
     flex-grow: 1;
 
-    padding-top: 3vw;
-    padding-bottom: 3vw;
+    padding-top: min(3vw, 3vh);
+    padding-bottom: min(3vw, 3vh);
 }
 
 .controls > .button {
@@ -71,8 +70,8 @@ body {
 }
 
 .controls .spacer {
-    height: 3vw;
-    width: 3vw;
+    height: min(3vw, 3vh);
+    width: min(3vw, 3vh);
 }
 
 .title {
@@ -83,8 +82,8 @@ body {
     font-size: 1.4rem;
     font-weight: 500;
 
-    margin-top: 1rem;
-    margin-bottom: 1rem;
+    margin-top: min(3vw, 3vh);
+    margin-bottom: 0px;
 }
 
 #modal {
