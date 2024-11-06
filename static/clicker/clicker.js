@@ -1,8 +1,5 @@
 window.oncontextmenu = (_) => false;
 
-connection = document.getElementById("connection");
-connection.innerHTML = "";  // remove noscript tag
-
 const baseURL = 'https://on-stage.click';
 const params = new URLSearchParams(location.search);
 const uuid_r = params.get('s');
@@ -19,37 +16,31 @@ function request(method, path, onLoad) {
     r.send();
 }
 
-function show(text) {
-    connection.textContent = text;
-}
-
 const genericHandler = e => {
         let code = e.target.status;
         if (code == 200) {
             // unlock controls
-            show('connected');
-            controls.forEach(c => c.disabled = false);
+            close_modal();
         } else if (code == 401) {
-            show('sorry, presentation session has expired due to inactivity');
+            show_blocking_modal(false, 'Session Expired', 'Sorry, this presentation session has expired due to inactivity.');
             clearInterval(checkInterval);   // no use checking
-            controls.forEach(c => c.disabled = true);
         } else if (code == 406) {
             // presenting device is offline
-            show('presenting device is not connected');
+            show_blocking_modal(false, 'Computer Offline', 'Could not contact your computer.');
             controls.forEach(c => c.disabled = true);
             // todo: show retry button
         } else if (code > 500 && code != 504) {
-            show('service unavailable, please try again later');
+            show_blocking_modal(false, 'Temorarily Unavailable', 'Please try again later.');
             controls.forEach(c => c.disabled = true);
             // todo: show retry button
         } else if (code == 0) {
-            show('unable to contact server');
+            show_blocking_modal(false, 'Offline', 'Unable to contact server.');
             controls.forEach(c => c.disabled = true);
             // todo: show retry button
         } else {
             console.log(code);
             console.log(e);
-            show('unknown error');
+            show_blocking_modal(false, 'Temorarily Unavailable', 'Unknown error.');
             // todo: show retry button
         }
     }
@@ -74,10 +65,15 @@ const body = document.querySelector('body');
 const clicker_ui = document.getElementById('clicker_ui');
 const modal = {
     modal:   document.getElementById('modal'),
+    prompt:  document.getElementById('modal_prompt'),
     title:   document.getElementById('m_title'),
     message: document.getElementById('m_message'),
     ok:      document.getElementById('m_ok'),
     nah:     document.getElementById('m_nah'),
+    block:   document.getElementById('modal_block'),
+    center_title: document.getElementById('m_center_title'),
+    center_msg:   document.getElementById('m_center_msg'),
+    wheel:        document.getElementById('m_wheel'),
 }
 
 function close_modal() {
@@ -87,9 +83,24 @@ function close_modal() {
 
 }
 
-// todo: make connecting/reconnecting modal
-function show_fullscreen_modal() {
+function show_blocking_modal(loading, title, message=null) {
+    modal.prompt.style.display = 'none';
+    modal.block.style.display = 'block';
+    modal.center_title.innerText = title;
 
+    modal.center_msg.innerText = message;
+    modal.center_msg.display = message != null ? 'block' : 'none';
+    
+    modal.wheel.style.display = loading ? 'block' : 'none';
+
+    clicker_ui.style.animation = 'defocus 0.2s ease-out 0ms 1 normal forwards';
+    modal.modal.classList = ['visible'];
+    body.style.overflow = 'hidden';
+}
+
+function show_fullscreen_modal() {
+    modal.block.style.display = 'none';
+    modal.prompt.style.display = 'block';
     modal.title.innerText = 'Fullscreen Mode';
     modal.message.innerText = 'For a better experience, enter fullscreen mode.';
     modal.ok.innerText = 'Enter fullscreen mode';
@@ -112,12 +123,12 @@ function show_fullscreen_modal() {
 
 if (uuid_r == null) {
     // there is no uuid parameter
-    connection.textContent = "no session: Please download the extension on your computer and scan the QR code.";
+    show_blocking_modal(false, 'no Session', 'Please download the extension on your computer and scan the QR code.');
     controls.forEach(c => c.disabled = true);
 } else {
 
     // run when page is loaded, tells presenting device to stop showing the qr code
-    connection.textContent = "connecting...";
+    show_blocking_modal(true, 'Connecting...');
     ping();
 
     next.onclick = next_slide;
