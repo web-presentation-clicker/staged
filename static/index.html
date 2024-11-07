@@ -13,7 +13,7 @@
     <!--Navbar container-->
     <ul id="navbar-container">
         <li><a href="#home">Home</a></li>
-        <li><a href="#documentation">Documentation</a></li>
+        <li><a href="#instructions">Instructions</a></li>
         <li><a href="#about">About</a></li>
         <li><a href="#donate">Donate</a></li>
     </ul>
@@ -22,11 +22,37 @@
         <h3>No presentation clicker?...No problem!</h3>
         <p>On-Stage is a simple app that allows you to remotely connect <br> and control your Google Slide presentation to your mobile device.</p>
         <div id="button-container">
+            <!--Extension to be linked within href of "a" tag-->
             <a href="#">Download Now</a>
         </div>
     </div>
-    <div id="documentation">
-        <p>This is the Documentation section</p>
+    <div id="instructions">
+        <h2>Step-By-Step Instructions:</h2>
+        <ol>
+            <li>Download the extension! (Click on "Download Now")</li>
+            <li>Add the extension the to your browser (See <a href="#browser-notes">browser notes</a>)</li>
+            <li>Open Google Slides</li>
+            <li>Select the extension to generate a QR Code</li>
+            <li>Scan the QR code with your mobile device to pair with Google Slides</li>
+            <li>In Google Slides, select the "Slideshow" button or press Ctrl+F5 </li>
+            <li>Once the slideshow begins, your mobile device will allow you to move to the next or previous slides</li>
+        </ol>
+
+        <h3 id="browser-notes">Browser Notes:</h3>
+        <p>Here's a summary of how to manage our extension with your respective browser:</p>
+        <div>
+            <ul>
+                <li>Open your browser and enable <em>Developer</em> mode</li>
+                <li>Select the extension downloaded extension to be added to your extensions</li>
+            </ul>
+            <br>
+            <h3>For Safari:</h3>
+            <ul>
+                <li>Open the extension as an <strong>Xcode</strong> project and export it as an <strong>.app</strong></li>
+                <li>Open Safari, go to <em>Preferences</em> then <em>Extensions</em></li>
+                <li>Enable the extension</li>
+            </ul>
+        </div>
     </div>
     <div id="about">
         <p>This is the About section</p>
@@ -34,6 +60,5 @@
     <div id="donate">
         <p>This is the Donate section</p>
     </div>
-    <button onclick="testFunction()">CLICK ME!</button>
 </body>
 </html>

@@ -1,8 +1,3 @@
-// Quick function for testing
-function testFunction(){
-    console.log("I'M ALIVE!!!");
-}
-
 // Detect browser & set appropriate download link
 function setDownloadLink(){
     let downloadButton = document.querySelector("#button-container a");
