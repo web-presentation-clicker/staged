@@ -8,6 +8,66 @@ const next = document.getElementById('next');
 const controls = [prev, next];
 let checkInterval;
 
+const supports_native_wakelock = typeof navigator.wakeLock !== undefined;
+let wakelock = null;
+
+function ensure_wakelock() {
+    // native wakelock uses less battery and is prefered, but a 1x1 pixel video can be used if not supported
+    if (supports_native_wakelock) {
+        if (wakelock != null && !wakelock.released) return;
+
+        console.log('requesting native wakelock');
+        navigator.wakeLock.request()
+            .then((wl) => {
+                console.log('acquired wakelock!');
+                wakelock = wl;
+            })
+            .catch((e) => {
+                console.error('failed to acquire wakelock:', e);
+            });
+    } else {
+        // create wakelock video element
+        if (wakelock == null) {
+            wakelock = document.createElement('video');
+            wakelock.setAttribute('playsinline', '');
+            wakelock.setAttribute('loop', '');
+            wakelock.setAttribute('title', 'Presenting');
+            wakelock.setAttribute('src', '/clicker/wakelock.webm');
+            document.getElementById('wakelock_fallback').appendChild(wakelock);
+        }
+        
+        // this will fail until the user clicks a button, but nothing can be done about that.
+        console.log('falling back to 1x1 pixel video');
+        wakelock.play()
+            .then(() => {
+                console.log('acquired wakelock!');
+            })
+            .catch((e) => {
+                console.error('failed to acquire wakelock:', e);
+            });
+
+    }
+}
+
+function clear_wakelock() {
+    if (wakelock == null) return;
+
+    if (supports_native_wakelock) {
+        console.log('releasing native wakelock');
+        wakelock.release()
+            .then((wl) => {
+                console.log('wakelock released!');
+                wakelock = null;
+            })
+            .catch((e) => {
+                console.error('failed to release wakelock:', e);
+            });
+    } else {
+        console.log('pausing');
+        wakelock.pause();
+    }
+}
+
 function request(method, path, onLoad) {
     r = new XMLHttpRequest();
     r.onreadystatechange = e => { if (e.target.readyState == 4) onLoad(e) };
@@ -21,9 +81,11 @@ const genericHandler = e => {
         if (code == 200) {
             // unlock controls
             close_modal();
+            ensure_wakelock();  // it would be frustrating if the screen sleeps
         } else if (code == 401) {
             show_blocking_modal(false, 'Session Expired', 'Sorry, this presentation session has expired due to inactivity.');
             clearInterval(checkInterval);   // no use checking
+            clear_wakelock();
         } else if (code == 406) {
             // presenting device is offline
             show_blocking_modal(false, 'Computer Offline', 'Could not contact your computer.', true);
@@ -74,7 +136,6 @@ function close_modal() {
     modal.modal.classList = ['hidden'];
     body.style.overflow = 'auto';
     clicker_ui.style.animation = 'focus 0.2s ease-out 0ms 1 normal forwards';
-
 }
 
 function show_blocking_modal(loading, title, message=null, show_reconnect=false) {

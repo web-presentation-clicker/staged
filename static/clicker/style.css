@@ -207,6 +207,11 @@ body {
     margin-bottom: 2rem;
 }
 
+#wakelock_fallback {
+    width: 1px;
+    height: 1px;
+}
+
 @keyframes pulse-active {
     to {
         background-color: #334;
