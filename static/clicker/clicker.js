@@ -8,7 +8,7 @@ const next = document.getElementById('next');
 const controls = [prev, next];
 let checkInterval;
 
-const supports_native_wakelock = typeof navigator.wakeLock !== undefined;
+const supports_native_wakelock = typeof navigator.wakeLock !== 'undefined';
 let wakelock = null;
 
 function ensure_wakelock() {
