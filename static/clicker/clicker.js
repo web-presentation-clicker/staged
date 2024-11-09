@@ -11,6 +11,8 @@ let checkInterval;
 const supports_native_wakelock = typeof navigator.wakeLock !== 'undefined';
 let wakelock = null;
 
+const is_playing = (vid) => !vid.paused && !vid.ended && vid.readyState > 2 && vid.currentTime > 0.0;
+
 function add_video_source(video, src, type) {
     let source = document.createElement('source');
     source.src = src;
@@ -18,48 +20,48 @@ function add_video_source(video, src, type) {
     video.appendChild(source);
 }
 
+function create_wakelock_fallback() {
+    wakelock = document.createElement('video');
+    // looping the video on iOS 15 makes it not work
+    wakelock.setAttribute('playsinline', '');
+    wakelock.setAttribute('title', 'Presenting');
+
+    // Note: Safari apparently doesn't support vp9 anymore for some reason. Why???
+    add_video_source(wakelock, '/clicker/wakelock.webm', 'video/webm; codecs="vp9,opus"');
+
+    // the iPhone I test with doesn't support webm containers at all
+    add_video_source(wakelock, '/clicker/wakelock.mp4', 'video/mp4; codecs="avc1.4d002a,mp4a.40.2"');
+
+    document.getElementById('wakelock_fallback').appendChild(wakelock);
+
+    // loop manually since the loop tag breaks it
+    wakelock.ontimeupdate = () => { if (wakelock.currentTime > 2.0) wakelock.currentTime = 0.69; }
+}
+
 function ensure_wakelock() {
+    let wl_promise;
+
     // native wakelock uses less battery and is prefered, but a 1x1 pixel video can be used if not supported
     if (supports_native_wakelock) {
         if (wakelock != null && !wakelock.released) return;
 
         console.log('requesting native wakelock');
-        navigator.wakeLock.request()
-            .then((wl) => {
-                console.log('acquired wakelock!');
-                wakelock = wl;
-            })
-            .catch((e) => console.error('failed to acquire wakelock:', e));
+        wl_promise = navigator.wakeLock.request()
+            .then((wl) => wakelock = wl);
+
     } else {
-
         // create wakelock video element
-        if (wakelock == null) {
-            wakelock = document.createElement('video');
-            // looping the video on iOS 15 makes it not work
-            wakelock.setAttribute('playsinline', '');
-            wakelock.setAttribute('title', 'Presenting');
+        if (wakelock == null) create_wakelock_fallback();
+        else if (is_playing(wakelock)) return;
 
-            // Note: Safari apparently doesn't support vp9 anymore for some reason. Why???
-            add_video_source(wakelock, '/clicker/wakelock.webm', 'video/webm; codecs="vp9,opus"');
-
-            // the iPhone I test with doesn't support webm containers at all
-            add_video_source(wakelock, '/clicker/wakelock.mp4', 'video/mp4; codecs="avc1.4d002a,mp4a.40.2"');
-
-            document.getElementById('wakelock_fallback').appendChild(wakelock);
-
-            // loop manually since the loop tag breaks it
-            wakelock.ontimeupdate = () => { if (wakelock.currentTime > 2.0) wakelock.currentTime = 0.69; }
-        }
-
-        console.log('falling back to *small* video');  // doesn't play on iOS unless at least 50x50, but can be resized in stylesheet
-        if (wakelock.paused || wakelock.ended || wakelock.readyState < 3 || wakelock.currentTime <= 0) {  // only play if not playing
-            // this will fail until the user clicks a button, but nothing can be done about that.
-            wakelock.play()
-                .then(() => console.log('acquired wakelock!'))
-                .catch((e) => console.error('failed to acquire wakelock:', e));
-        }
-
+        console.log('falling back to *small* video');  
+        // this will fail until the user clicks a button, but nothing can be done about that.
+        wl_promise = wakelock.play();
     }
+
+    wl_promise
+        .then(() => console.log('acquired wakelock!'))
+        .catch((e) => console.error('failed to acquire wakelock:', e));
 }
 
 function clear_wakelock() {
@@ -68,15 +70,13 @@ function clear_wakelock() {
     if (supports_native_wakelock) {
         console.log('releasing native wakelock');
         wakelock.release()
-            .then((wl) => {
+            .then(() => {
                 console.log('wakelock released!');
                 wakelock = null;
             })
-            .catch((e) => {
-                console.error('failed to release wakelock:', e);
-            });
+            .catch((e) => console.error('failed to release wakelock:', e));
     } else {
-        console.log('pausing');
+        console.log('pausing wakelock fallback video');
         wakelock.pause();
     }
 }
@@ -111,7 +111,7 @@ const genericHandler = e => {
             console.log(e);
             show_blocking_modal(false, 'Temorarily Unavailable', 'Unknown error.', true);
         }
-    }
+    };
 
 function ping() {
     request('GET', '/api/v1/session/hello', genericHandler);
@@ -145,40 +145,47 @@ const modal = {
     reconnect:    document.getElementById('m_reconnect'),
 }
 
+// helpers
+const hide = (e) => e.style.display = 'none';
+const unhide = (e) => e.style.display = '';
+const set_hidden = (e, d) => (d ? hide : unhide)(e);
+
+// reconnect always reconnects
+modal.reconnect.onclick = (e) => {
+    show_blocking_modal(true, 'Reconnecting...');
+    ping();
+};
+
 function close_modal() {
     modal.modal.classList = ['hidden'];
+    clicker_ui.style.animation = 'focus 0.2s ease-in';
     body.style.overflow = 'auto';
-    clicker_ui.style.animation = 'focus 0.2s ease-out 0ms 1 normal forwards';
 }
 
-function show_blocking_modal(loading, title, message=null, show_reconnect=false) {
-    modal.prompt.style.display = 'none';
-    modal.block.style.display = 'block';
-    modal.center_title.innerText = title;
-
-    modal.center_msg.innerText = message;
-    modal.center_msg.display = message != null ? 'block' : 'none';
-    
-    modal.wheel.style.display = loading ? 'block' : 'none';
-
-    if (show_reconnect) {
-        modal.reconnect.onclick = (e) => {
-            show_blocking_modal(true, 'Reconnecting...');
-            ping();
-        };
-        modal.reconnect.style.display = 'block';
-    } else {
-        modal.reconnect.style.display = 'none';
-    }
-
-    clicker_ui.style.animation = 'defocus 0.2s ease-out 0ms 1 normal forwards';
+function open_modal() {
+    clicker_ui.style.animation = 'defocus 0.2s ease-out';
     modal.modal.classList = ['visible'];
     body.style.overflow = 'hidden';
 }
 
+function show_blocking_modal(loading, title, message=null, show_reconnect=false) {
+    hide(modal.prompt);
+    unhide(modal.block);
+
+    modal.center_title.innerText = title;
+    modal.center_msg.innerText = message;
+
+    set_hidden(modal.center_msg, message == null);
+    set_hidden(modal.wheel, !loading);
+    set_hidden(modal.reconnect, !show_reconnect);
+
+    open_modal();
+}
+
 function show_fullscreen_modal() {
-    modal.block.style.display = 'none';
-    modal.prompt.style.display = 'block';
+    hide(modal.block);
+    unhide(modal.prompt);
+    
     modal.title.innerText = 'Fullscreen Mode';
     modal.message.innerText = 'For a better experience, enter fullscreen mode.';
     modal.ok.innerText = 'Enter fullscreen mode';
@@ -191,13 +198,8 @@ function show_fullscreen_modal() {
 
     modal.nah.onclick = (e) => close_modal();
 
-    clicker_ui.style.animation = 'defocus 0.2s ease-out 0ms 1 normal forwards';
-    modal.modal.classList = ['visible'];
-    body.style.overflow = 'hidden';
+    open_modal();
 }
-
-
-// show_fullscreen_modal();
 
 if (uuid_r == null) {
     // there is no uuid parameter
