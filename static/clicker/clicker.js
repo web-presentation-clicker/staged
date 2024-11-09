@@ -160,9 +160,12 @@ function close_modal() {
     modal.modal.classList = ['hidden'];
     clicker_ui.style.animation = 'focus 0.2s ease-in';
     body.style.overflow = 'auto';
+    // interesting firefox (race condition?) mitigation
+    setTimeout(() => hide(modal.modal), 200);
 }
 
 function open_modal() {
+    unhide(modal.modal);
     clicker_ui.style.animation = 'defocus 0.2s ease-out';
     modal.modal.classList = ['visible'];
     body.style.overflow = 'hidden';
