@@ -189,6 +189,9 @@ body {
 }
 
 #modal_block {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
     position: fixed;
     align-content: center;
 
