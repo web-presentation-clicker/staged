@@ -209,8 +209,8 @@ if (uuid_r == null) {
     show_blocking_modal(true, 'Connecting...');
     ping();
 
-    next.onclick = next_slide;
-    prev.onclick = prev_slide;
+    next.onmousedown = next_slide;
+    prev.onmousedown = prev_slide;
 
     // periodically check for availability
     checkInterval = setInterval(ping, 20000);
