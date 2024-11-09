@@ -10,9 +10,7 @@ function setDownloadLink(){
         downloadButton.href = ""    // path to Chrome extension -- TO BE ADDED
     } else if (userAgent.includes("Firefox")){
         downloadButton.href = ""    // path to Firefox extension -- TO BE ADDED
-    } else if (userAgent.includes("Safari")){
-        downloadButton.href = ""    // path to Safari extension -- TO BE ADDED
-    } else {
+    }else {
         downloadButton.href = ""    // default link -- TO BE ADDED
     }
 }
