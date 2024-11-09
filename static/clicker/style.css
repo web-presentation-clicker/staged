@@ -208,8 +208,14 @@ body {
 }
 
 #wakelock_fallback {
-    width: 1px;
-    height: 1px;
+    /* if this is 5x5 it... crashes safari‽ */
+    max-width: 10px;
+    max-height: 10px;
+}
+
+#wakelock_fallback video {
+    width: 10px;
+    height: 10px;
 }
 
 @keyframes pulse-active {

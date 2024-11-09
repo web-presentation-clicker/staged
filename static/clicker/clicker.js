@@ -11,6 +11,13 @@ let checkInterval;
 const supports_native_wakelock = typeof navigator.wakeLock !== 'undefined';
 let wakelock = null;
 
+function add_video_source(video, src, type) {
+    let source = document.createElement('source');
+    source.src = src;
+    source.type = type;
+    video.appendChild(source);
+}
+
 function ensure_wakelock() {
     // native wakelock uses less battery and is prefered, but a 1x1 pixel video can be used if not supported
     if (supports_native_wakelock) {
@@ -22,29 +29,35 @@ function ensure_wakelock() {
                 console.log('acquired wakelock!');
                 wakelock = wl;
             })
-            .catch((e) => {
-                console.error('failed to acquire wakelock:', e);
-            });
+            .catch((e) => console.error('failed to acquire wakelock:', e));
     } else {
+
         // create wakelock video element
         if (wakelock == null) {
             wakelock = document.createElement('video');
+            // looping the video on iOS 15 makes it not work
             wakelock.setAttribute('playsinline', '');
-            wakelock.setAttribute('loop', '');
             wakelock.setAttribute('title', 'Presenting');
-            wakelock.setAttribute('src', '/clicker/wakelock.webm');
+
+            // Note: Safari apparently doesn't support vp9 anymore for some reason. Why???
+            add_video_source(wakelock, '/clicker/wakelock.webm', 'video/webm; codecs="vp9,opus"');
+
+            // the iPhone I test with doesn't support webm containers at all
+            add_video_source(wakelock, '/clicker/wakelock.mp4', 'video/mp4; codecs="avc1.4d002a,mp4a.40.2"');
+
             document.getElementById('wakelock_fallback').appendChild(wakelock);
+
+            // loop manually since the loop tag breaks it
+            wakelock.ontimeupdate = () => { if (wakelock.currentTime > 2.0) wakelock.currentTime = 0.69; }
         }
-        
-        // this will fail until the user clicks a button, but nothing can be done about that.
-        console.log('falling back to 1x1 pixel video');
-        wakelock.play()
-            .then(() => {
-                console.log('acquired wakelock!');
-            })
-            .catch((e) => {
-                console.error('failed to acquire wakelock:', e);
-            });
+
+        console.log('falling back to *small* video');  // doesn't play on iOS unless at least 50x50, but can be resized in stylesheet
+        if (wakelock.paused || wakelock.ended || wakelock.readyState < 3 || wakelock.currentTime <= 0) {  // only play if not playing
+            // this will fail until the user clicks a button, but nothing can be done about that.
+            wakelock.play()
+                .then(() => console.log('acquired wakelock!'))
+                .catch((e) => console.error('failed to acquire wakelock:', e));
+        }
 
     }
 }
