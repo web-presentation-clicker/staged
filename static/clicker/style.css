@@ -81,13 +81,21 @@ body {
     margin-bottom: min(3vw, 3vh);
 }
 
+.title > img {
+    width: 2.5rem;
+    height: 2.5rem;
+}
+
 .title h1 {
     display: inline;
 
     font-size: 1.4rem;
     font-weight: 500;
 
-    margin: 0px;
+    margin-left: .5rem;
+    margin-right: .5rem;
+    margin-top: 0px;
+    margin-bottom: 0px;
 }
 
 .title .button-bar {
