@@ -5,6 +5,7 @@ const params = new URLSearchParams(location.search);
 const uuid_r = params.get('s');
 const prev = document.getElementById('previous');
 const next = document.getElementById('next');
+const fullscreen = document.getElementById('fullscreen_button');
 const controls = [prev, next];
 let checkInterval;
 
@@ -195,7 +196,7 @@ function show_fullscreen_modal() {
     modal.nah.innerText = 'No, thanks';
 
     modal.ok.onclick = (e) => {
-        body.requestFullscreen();
+        body.requestFullscreen({navigationUI: 'hide'});
         close_modal();
     };
 
@@ -203,6 +204,26 @@ function show_fullscreen_modal() {
 
     open_modal();
 }
+
+function on_fullscreen_state(is_fs) {
+    if (is_fs) {
+        fullscreen.onclick = () => document.exitFullscreen();
+        fullscreen.style.backgroundImage = 'url("/img/exit-fullscreen.svg")';
+    } else {
+        fullscreen.onclick = show_fullscreen_modal;
+        fullscreen.style.backgroundImage = '';
+    }
+}
+
+// set up fullscreen
+if (document.fullscreenEnabled) {
+    document.onfullscreenchange = () => on_fullscreen_state(document.fullscreenElement != null);
+    document.onfullscreenchange();  // set up button
+} else {
+    // Apple can't decide if they want fullscreen
+    hide(fullscreen);
+}
+
 
 if (uuid_r == null) {
     // there is no uuid parameter

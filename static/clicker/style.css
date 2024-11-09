@@ -13,11 +13,13 @@ body {
     display: flex;
     flex-direction: column;
 
-    height: 100%;
+    height: calc(100% - min(6vw, 6vh));
     width: calc(100vw - min(6vw, 6vh));
 
-    padding-left: min(3vw, 3vh);
-    padding-right: min(3vw, 3vh);
+    margin-left: min(3vw, 3vh);
+    margin-right: min(3vw, 3vh);
+    margin-top: min(3vw, 3vh);
+    margin-bottom: min(3vw, 3vh);
 }
 
 #next {
@@ -47,12 +49,9 @@ body {
 .controls {
     display: flex;
     flex-direction: column;
-
-    width: 100%;
     flex-grow: 1;
 
-    padding-top: min(3vw, 3vh);
-    padding-bottom: min(3vw, 3vh);
+    width: 100%;
 }
 
 .controls > .button {
@@ -76,14 +75,38 @@ body {
 
 .title {
     flex-shrink: 1;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    margin-bottom: min(3vw, 3vh);
 }
 
 .title h1 {
+    display: inline;
+
     font-size: 1.4rem;
     font-weight: 500;
 
-    margin-top: min(3vw, 3vh);
-    margin-bottom: 0px;
+    margin: 0px;
+}
+
+.title .button-bar {
+    margin-left: auto;
+    margin-right: -.5rem;
+}
+
+.button-bar > .button {
+    height: 3rem;
+    width: 3rem;
+    margin-left: .5rem;
+    margin-right: .5rem;
+}
+
+#fullscreen_button {
+    background-image: url("/img/fullscreen.svg");
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 1.5rem;
 }
 
 #modal {
