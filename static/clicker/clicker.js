@@ -166,7 +166,7 @@ function close_modal() {
 
 function open_modal() {
     unhide(modal.modal);
-    clicker_ui.style.animation = 'defocus 0.2s ease-out';
+    clicker_ui.style.animation = 'defocus 0.2s ease-out 0ms 1 normal forwards';
     modal.modal.classList = ['visible'];
 }
 
