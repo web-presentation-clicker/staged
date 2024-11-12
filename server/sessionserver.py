@@ -48,6 +48,7 @@ SOCKETS_CLOSED = 'sock_closed'
 SESSIONS_OPENED = 'sess_opened'
 SESSIONS_CLOSED = 'sess_closed'
 SESSIONS_EXPIRED = 'sess_expired'
+SESSIONS_ENDED = 'sess_ended'
 SESSIONS_RECONNECTED = 'sess_recon'
 MAINTENANCE_TIME = 'maintenance_time'
 MAINTENANCE_LOOPS = 'maintenance_loops'
@@ -84,6 +85,7 @@ class PrometheusHelper(PrometheusStub):
         self._metrics[SESSIONS_OPENED] = Counter(self._pfx + 'sessions_opened', 'total number of opened sessions')
         self._metrics[SESSIONS_CLOSED] = Counter(self._pfx + 'sessions_closed', 'total number of closed sessions')
         self._metrics[SESSIONS_EXPIRED] = Counter(self._pfx + 'sessions_expired', 'total number of expired sessions')
+        self._metrics[SESSIONS_ENDED] = Counter(self._pfx + 'sessions_ended', 'total number of explicitly ended sessions')
         self._metrics[SESSIONS_RECONNECTED] = Counter(self._pfx + 'sessions_reconnected', 'total number of session reconnections')
         self._metrics[MAINTENANCE_TIME] = Counter(self._pfx + 'maintenance_time', 'total time spent in seconds doing maintenance jobs')
         self._metrics[MAINTENANCE_LOOPS] = Counter(self._pfx + 'maintenance_loops', 'total number of maintenance jobs run')
@@ -194,6 +196,9 @@ class RequestHandler(BaseRequestHandler):
     def read_len_first(self):
         n = int.from_bytes(self.request.recv(1))
         return self.request.recv(n)
+
+    def read_uuid(self) -> bytes:
+        return self.request.recv(16)
 
     def init_sender(self):
         self.tag = ('sender',)
@@ -309,6 +314,9 @@ class RequestHandler(BaseRequestHandler):
         elif func == V1_FUNC_RESUME:            # resume
             tag += ('resume',)
             self.resume_v1(tag)
+        elif func == V1_FUNC_END:               # end
+            tag += ('end',)
+            self.end_v1(tag)
         else:
             tag += ('nofunc',)
             Log.w(tag, 'invalid func value')
@@ -347,8 +355,26 @@ class RequestHandler(BaseRequestHandler):
         self.request.sendall(V1_OK)
         self.request.sendall(ident)
 
+    def end_v1(self, tag):
+        ident = self.read_uuid()
+        uuid_s = UUID(bytes=ident)
+        tag += (uuid_s,)
+
+        Log.d(tag, 'request to end session')
+
+        # pop the session
+        if session_table.pop(ident) is None:
+            Log.v(tag, 'session does not exist in table, it may have already expired')
+            self.request.sendall(V1_OK)  # this is still a success
+            return
+
+        Log.v(tag, 'ended session')
+        prom.inc(SESSIONS_ENDED)
+        prom.inc(SESSIONS_CLOSED)
+        self.request.sendall(V1_OK)
+
     def resume_v1(self, tag):
-        ident = self.request.recv(16)
+        ident = self.read_uuid()
         uuid_s = UUID(bytes=ident)
         tag += (uuid_s,)
 
@@ -371,10 +397,6 @@ class RequestHandler(BaseRequestHandler):
         Log.d(tag, 'session resume, updating target worker')
         # todo: test rapid resumption, there might be issues with race conditions
         old_worker = session.worker_id
-        if old_worker != self.worker_id:
-            # don't need to wait for result
-            # todo: sort this out
-            submit_event(old_worker, V1_FUNC_DISOWN, ident, click_queue_ttl)
         session.worker_id = self.worker_id  # update session to be reachable at new worker id
         
         self.request.sendall(V1_OK)
@@ -395,7 +417,7 @@ class RequestHandler(BaseRequestHandler):
             raise Panic('invalid function for click_v1')
 
         # get/validate uuid
-        ident = self.request.recv(16)
+        ident = self.read_uuid()
         uuid_s = UUID(bytes=ident)
         tag += (uuid_s,)
 
@@ -462,10 +484,10 @@ def maintain():
                 if session is None:
                     continue
                 elif time() - session.last_contact > session_timeout:
-                    session_table.pop(ident)
-                    Log.i(tag, 'expired session:', UUID(bytes=ident))
-                    prom.inc(SESSIONS_EXPIRED)
-                    prom.inc(SESSIONS_CLOSED)
+                    if session_table.pop(ident) is not None:
+                        Log.i(tag, 'expired session:', UUID(bytes=ident))
+                        prom.inc(SESSIONS_EXPIRED)
+                        prom.inc(SESSIONS_CLOSED)
 
         except BaseException as e:
             Log.wtf('maintenance thread threw exception!!', e)

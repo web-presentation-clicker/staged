@@ -41,15 +41,15 @@ def ipv4_addr_bytes(ip_addr_s: str) -> bytes:
     return IPv4Address(ip_addr_s).packed
 
 
-def ws_send(msg: str):
-    uwsgi.websocket_send(msg.encode('ascii'))
+def ws_send(msg: bytes):
+    uwsgi.websocket_send(msg)
 
 
 def ws_send_err(msg: str):
-    ws_send('ERR: %s' % msg)
+    ws_send(('ERR: %s' % msg).encode('ascii'))
 
 
-def do_socket_loop_v1(tag, ident, cb):
+def do_socket_loop_v1(tag, ident: bytes, cb):
     while True:
         # wait for event
         event = cb.pop(timeout=ws_poll_time)
@@ -58,12 +58,24 @@ def do_socket_loop_v1(tag, ident, cb):
 
         try:
             # ensure socket alive
-            uwsgi.websocket_recv_nb()
-            # currently the websocket doesn't send commands. this may change
+            ws_cmd = uwsgi.websocket_recv_nb()
+
+            # handle websocket cmd
+            if ws_cmd is not None:
+                if ws_cmd == V1_EVENT_END:
+                    Log.d(tag, 'session ending')
+                    # yeet this at the session server and don't check for a result, it doesn't matter
+                    if submit_command(V1_FUNC_END + ident, 0, session_queue_ttl) is None:
+                        Log.w(tag, 'failed to send session end to session server. queue full! is the server overloaded???')
+
+                    # don't forget to respond to the event
+                    if event is not None:
+                        event.result = V1_COMM_FAIL
+                    return
 
             # event?
             if event is None:
-                continue
+                continue  # nothing to do
 
             # event valid?
             if not event.claim():
@@ -78,10 +90,6 @@ def do_socket_loop_v1(tag, ident, cb):
                 ws_send(V1_EVENT_NEXT)
             elif event.event_type == V1_FUNC_PREV:
                 ws_send(V1_EVENT_PREV)
-            elif event.event_type == V1_FUNC_DISOWN:
-                # this session has a new socket loop
-                Log.v(tag, 'disowned!')
-                return
             else:
                 # this should never happen
                 Log.wtf(tag, 'session server sent unknown command')
@@ -100,6 +108,9 @@ def do_socket_loop_v1(tag, ident, cb):
             raise e
         finally:
             if event is not None:
+                # set comm error if no result
+                if event.result is None and not event.error:
+                    event.result = V1_COMM_FAIL
                 event.done()
 
 
@@ -124,7 +135,7 @@ def do_socket_v1(tag, env):
                    + ip_addr_b)
 
         # make session
-        cmd = submit_command(payload, 16, create_queue_ttl)
+        cmd = submit_command(payload, 16, session_queue_ttl)
         if cmd is None:  # queue full
             Log.w(tag, 'command queue full!!! server overloaded?')
             ws_send_err('try again')
@@ -198,7 +209,7 @@ def do_socket_v1(tag, env):
                    + ident)
 
         # resume session
-        cmd = submit_command(payload, 0, resume_queue_ttl)
+        cmd = submit_command(payload, 0, session_queue_ttl)
         if cmd is None:  # queue full
             Log.w(tag, 'command queue full!!! server overloaded?')
             ws_send_err('try again')
@@ -342,6 +353,7 @@ def application(env, sr):
             # todo: !!!!!!!!!!!!!!!!!!!!DO NOT FUCKING USE THIS IN PRODUCTION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             headers.append(('Access-Control-Allow-Origin', '*'))
             headers.append(('Access-Control-Allow-Headers', 'Authorization'))
+            headers.append(('Upgrade-Insecure-Requests', '0'))
 
             method = env.get('REQUEST_METHOD')
             if method == 'OPTIONS':
@@ -435,8 +447,7 @@ def load_config():
     global cmd_queue_size
     global ws_queue_size
     global click_queue_ttl
-    global create_queue_ttl
-    global resume_queue_ttl
+    global session_queue_ttl
     global poll_time
     global ws_poll_time
 
@@ -455,8 +466,7 @@ def load_config():
     ws_queue_size = config.get('websocket_queue_size', DEFAULT_LISTENER_THREADS)
 
     click_queue_ttl = config.get('click_queue_ttl', DEFAULT_CLICK_QUEUE_TTL)
-    create_queue_ttl = config.get('create_queue_ttl', DEFAULT_CREATE_QUEUE_TTL)
-    resume_queue_ttl = config.get('resume_queue_ttl', DEFAULT_RESUME_QUEUE_TTL)
+    session_queue_ttl = config.get('session_queue_ttl', DEFAULT_SESSION_QUEUE_TTL)
 
     poll_time = config.get('poll_time', DEFAULT_POLL_TIME)
     ws_poll_time = config.get('ws_poll_time', DEFAULT_WS_POLL_TIME)
@@ -469,8 +479,7 @@ global num_listeners
 global cmd_queue_size
 global ws_queue_size
 global click_queue_ttl
-global create_queue_ttl
-global resume_queue_ttl
+global session_queue_ttl
 global poll_time
 global ws_poll_time
 listener_threads = []

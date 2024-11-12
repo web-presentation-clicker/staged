@@ -39,8 +39,7 @@ poll_time: 10
 # don't set them too high. imagine you're a user, you click and nothing happens, but 20 seconds later
 # after you give up it finally goes through and messes up your presentation. that would be pretty annoying.
 click_queue_ttl: 5
-create_queue_ttl: 5
-resume_queue_ttl: 7
+session_queue_ttl: 7
 
 
 # ===================== uwsgi app =====================
@@ -72,9 +71,10 @@ cmd_queue_size: 20
 websocket_queue_size: 4
 
 # poll_time but for the websocket loop.
-# this may need to remain low, as this is the interval at which the websocket connection status is checked.
-# setting this too high will increase the time that these loops remain running after the websocket disconnects.
-# if this is not an issue, this can be safely raised.
+# this may need to remain low, as this is the interval at which the websocket connection status is checked, and
+# websocket commands are read.
+# setting this too high will increase the time that these loops remain running after the websocket disconnects,
+# and increase websocket command latency
 websocket_poll_time: 5
 
 # exporting metrics via prometheus with a port range

@@ -8,10 +8,10 @@ V1_INIT_SENDER = V1_INIT + 0x02.to_bytes()
 # functions
 V1_FUNC_CREATE_SESSION = 0x91.to_bytes()
 V1_FUNC_RESUME = 0x92.to_bytes()
-V1_FUNC_DISOWN = 0x93.to_bytes()
 V1_FUNC_NEXT = 0x81.to_bytes()
 V1_FUNC_PREV = 0x82.to_bytes()
 V1_FUNC_HELLO = 0x83.to_bytes()
+V1_FUNC_END = 0x84.to_bytes()
 
 
 # responses
@@ -28,9 +28,10 @@ NULL = 0x00.to_bytes()
 # websocket events
 V1_EVENT_NEW = 'new'
 V1_EVENT_RESUME_PFX = 'resume: '
-V1_EVENT_HELLO = 'hello'
-V1_EVENT_NEXT = 'next_slide'
-V1_EVENT_PREV = 'prev_slide'
+V1_EVENT_HELLO = b'hello'
+V1_EVENT_NEXT = b'next_slide'
+V1_EVENT_PREV = b'prev_slide'
+V1_EVENT_END = b'end'
 
 # poll flags
 POLL_DEATH_FLAGS = POLLHUP | POLLRDHUP | POLLNVAL | POLLERR
@@ -52,8 +53,7 @@ DEFAULT_WS_QUEUE_SIZE = 4
 DEFAULT_EVENT_QUEUE_SIZE = 20
 
 DEFAULT_CLICK_QUEUE_TTL = 5
-DEFAULT_CREATE_QUEUE_TTL = 5
-DEFAULT_RESUME_QUEUE_TTL = 7
+DEFAULT_SESSION_QUEUE_TTL = 7
 
 DEFAULT_POLL_TIME = 10
 DEFAULT_WS_POLL_TIME = 5
