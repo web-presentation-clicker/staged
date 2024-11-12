@@ -350,10 +350,11 @@ def application(env, sr):
         elif path.startswith('/api/v1/session'):
             tag += ('/api/v1/session',)
             headers.append(CONTENT_PLAIN_TEXT)
-            # todo: !!!!!!!!!!!!!!!!!!!!DO NOT FUCKING USE THIS IN PRODUCTION!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-            headers.append(('Access-Control-Allow-Origin', '*'))
+
+            if len(cors_origin_header_value) > 0:
+                headers.append(('Access-Control-Allow-Origin', cors_origin_header_value))
+
             headers.append(('Access-Control-Allow-Headers', 'Authorization'))
-            headers.append(('Upgrade-Insecure-Requests', '0'))
 
             method = env.get('REQUEST_METHOD')
             if method == 'OPTIONS':
@@ -450,6 +451,7 @@ def load_config():
     global session_queue_ttl
     global poll_time
     global ws_poll_time
+    global cors_origin_header_value
 
     config = read_config()
     if config is None:
@@ -471,6 +473,8 @@ def load_config():
     poll_time = config.get('poll_time', DEFAULT_POLL_TIME)
     ws_poll_time = config.get('ws_poll_time', DEFAULT_WS_POLL_TIME)
 
+    cors_origin_header_value = config.get('cors_origin_header_value', DEFAULT_CORS_ORIGIN_HEADER_VALUE)
+
 # config vars
 global session_server_timeout
 global session_server_socket
@@ -482,6 +486,7 @@ global click_queue_ttl
 global session_queue_ttl
 global poll_time
 global ws_poll_time
+global cors_origin_header_value
 listener_threads = []
 sender_threads = []
 

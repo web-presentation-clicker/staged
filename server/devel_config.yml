@@ -87,6 +87,11 @@ prometheus_uwsgi: # todo
   addr: 127.0.0.1
 
 
+# CORS header value
+# this is primarily here for development purposes. you should preferably define headers in your nginx config.
+# an empty value sends no cors origin header (default)
+cors_origin_header_value: 'http://localhost:5500'
+
 # ===================== session server =====================
 
 # the maximum number of events in the event queue PER CONNECTED LISTENER before new ones are rejected.
