@@ -368,7 +368,7 @@ class RequestHandler(BaseRequestHandler):
         Log.d(tag, 'request to end session')
 
         # pop the session
-        if session_table.pop(ident) is None:
+        if session_table.pop(ident, None) is None:
             Log.v(tag, 'session does not exist in table, it may have already expired')
             self.request.sendall(V1_OK)  # this is still a success
             return
@@ -487,7 +487,7 @@ def maintain():
                 if session is None:
                     continue
                 elif time() - session.last_contact > session_timeout:
-                    if session_table.pop(ident) is not None:
+                    if session_table.pop(ident, None) is not None:
                         Log.i(tag, 'expired session:', UUID(bytes=ident))
                         prom.inc(SESSIONS_EXPIRED)
                         prom.inc(SESSIONS_CLOSED)
