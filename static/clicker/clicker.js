@@ -8,6 +8,7 @@ const next = document.getElementById('next');
 const fullscreen = document.getElementById('fullscreen_button');
 const controls = [prev, next];
 let checkInterval;
+let blocking = false;
 
 const supports_native_wakelock = typeof navigator.wakeLock !== 'undefined';
 let wakelock = null;
@@ -94,7 +95,7 @@ const genericHandler = e => {
         let code = e.target.status;
         if (code == 200) {
             // unlock controls
-            close_modal();
+            if (blocking) close_modal();
             ensure_wakelock();  // it would be frustrating if the screen sleeps
         } else if (code == 401) {
             show_blocking_modal(false, 'Session Expired', 'Sorry, this presentation session has expired due to inactivity.');
@@ -146,6 +147,8 @@ const modal = {
     reconnect:    document.getElementById('m_reconnect'),
 }
 
+let modal_open = false;
+
 // helpers
 const hide = (e) => e.style.display = 'none';
 const unhide = (e) => e.style.display = '';
@@ -158,13 +161,19 @@ modal.reconnect.onclick = (e) => {
 };
 
 function close_modal() {
+    if (!modal_open) return false;
+    modal_open = false;
+    blocking = false;
+    
     modal.modal.classList = ['hidden'];
     clicker_ui.style.animation = 'focus 0.2s ease-in';
     // interesting firefox (race condition?) mitigation
     setTimeout(() => hide(modal.modal), 200);
 }
 
-function open_modal() {
+function open_modal(focus_item) {
+    modal_open = true;
+
     unhide(modal.modal);
     clicker_ui.style.animation = 'defocus 0.2s ease-out 0ms 1 normal forwards';
     modal.modal.classList = ['visible'];
