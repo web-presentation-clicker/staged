@@ -150,8 +150,36 @@ ol li a{
 
 #about{
     height: 100vh;
+    font-family: Californian FB, sans-serif;
+    line-height: 2em;
+    padding-left: 20%;
+    padding-right: 20%;
 }
 
 #donate{
     height: 100vh;
+    line-height: 2em;
+}
+
+#donation-button {
+    text-align: center;
+    background-color: #202024;
+    width: 200px;
+    height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 5%;
+    margin: 2em auto;
+}
+
+#donation-button:hover{
+    background-color: #FF671D;
+}
+
+#donation-button a{
+    text-decoration: none;
+    color: #FFF;
+    font-size: 16px;
+    font-weight: bold;
 }
