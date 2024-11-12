@@ -50,6 +50,7 @@ SESSIONS_CLOSED = 'sess_closed'
 SESSIONS_EXPIRED = 'sess_expired'
 SESSIONS_ENDED = 'sess_ended'
 SESSIONS_RECONNECTED = 'sess_recon'
+QUEUE_DROPPED = 'queue_dropped'
 MAINTENANCE_TIME = 'maintenance_time'
 MAINTENANCE_LOOPS = 'maintenance_loops'
 MAINTENANCE_LAST_TS = 'maintenance_last_ts'
@@ -87,6 +88,7 @@ class PrometheusHelper(PrometheusStub):
         self._metrics[SESSIONS_EXPIRED] = Counter(self._pfx + 'sessions_expired', 'total number of expired sessions')
         self._metrics[SESSIONS_ENDED] = Counter(self._pfx + 'sessions_ended', 'total number of explicitly ended sessions')
         self._metrics[SESSIONS_RECONNECTED] = Counter(self._pfx + 'sessions_reconnected', 'total number of session reconnections')
+        self._metrics[QUEUE_DROPPED] = Counter(self._pfx + 'queue_dropped', 'total number of dropped events in the send queue, indicative of server overload')
         self._metrics[MAINTENANCE_TIME] = Counter(self._pfx + 'maintenance_time', 'total time spent in seconds doing maintenance jobs')
         self._metrics[MAINTENANCE_LOOPS] = Counter(self._pfx + 'maintenance_loops', 'total number of maintenance jobs run')
         self._metrics[MAINTENANCE_LAST_TS] = Gauge(self._pfx + 'maintenance_last_timestamp', 'timestamp of the last successful maintenance job\'s completion')
@@ -138,7 +140,10 @@ def submit_event(worker_id, event_type, uuid_b, ttl):
     if queue is None:
         # generally, this shouldn't happen
         raise KeyError('no listeners connected for destination worker')
-    return queue.submit(ClickEvent(event_type, uuid_b, ttl))
+    item = queue.submit(ClickEvent(event_type, uuid_b, ttl))
+    if item is None:
+        prom.inc(QUEUE_DROPPED)
+    return item
 
 
 class IPAddr(object):
@@ -435,7 +440,6 @@ class RequestHandler(BaseRequestHandler):
             if event is None:
                 Log.w(tag, 'event queue full!!! server overloaded?')
                 self.request.sendall(V1_GEN_FAIL)
-                # todo: maybe an extra prometheus thing for this, since this is caused by too much load
                 prom.inc(CLICKS_FAIL, labels=labels)
                 return
 
