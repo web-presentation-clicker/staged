@@ -54,8 +54,6 @@ def do_socket_loop_v1(tag, ident: bytes, cb):
         # wait for event
         event = cb.pop(timeout=ws_poll_time)
 
-        # todo: poll session server for session validity?
-
         try:
             # ensure socket alive
             ws_cmd = uwsgi.websocket_recv_nb()
@@ -168,7 +166,7 @@ def do_socket_v1(tag, env):
             callback_table[ident] = cb
 
         try:
-            ws_send('uuid: %s' % uuid_s)
+            ws_send(('uuid: %s' % uuid_s).encode('ascii'))
 
             # loop
             do_socket_loop_v1(tag, ident, cb)
@@ -238,7 +236,7 @@ def do_socket_v1(tag, env):
             callback_table[ident] = cb
 
         try:
-            ws_send('resumed')
+            ws_send(b'resumed')
 
             # loop
             do_socket_loop_v1(tag, ident, cb)
