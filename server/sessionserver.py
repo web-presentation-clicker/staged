@@ -427,8 +427,6 @@ class RequestHandler(BaseRequestHandler):
             self.request.sendall(V1_NO_SESSION)
             return
 
-        session.alive()
-
         # forward event to relevant queue
         Log.v(tag, 'forwarding event')
         prom.inc(CLICKS_PENDING, labels=labels)
@@ -445,6 +443,7 @@ class RequestHandler(BaseRequestHandler):
 
             if event.result == V1_OK:
                 prom.inc(CLICKS_SUCC, labels=labels)
+                session.alive()
             else:
                 prom.inc(CLICKS_FAIL, labels=labels)
         except KeyError as e:
