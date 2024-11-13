@@ -88,6 +88,15 @@ def do_socket_loop_v1(tag, ident: bytes, cb):
                 ws_send(V1_EVENT_NEXT)
             elif event.event_type == V1_FUNC_PREV:
                 ws_send(V1_EVENT_PREV)
+            elif event.event_type == V1_FUNC_REROUTED:
+                Log.d(tag, 'rerouted!')
+                event.result = V1_OK
+                return
+            elif event.event_type == V1_FUNC_EXPIRED:
+                Log.d(tag, 'expired!')
+                ws_send_err('session expired')
+                event.result = V1_OK
+                return
             else:
                 # this should never happen
                 Log.wtf(tag, 'session server sent unknown command')

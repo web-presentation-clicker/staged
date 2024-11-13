@@ -160,6 +160,18 @@ class IPAddr(object):
             return str(IPv4Address(self.b))
 
 
+def close_session(tag, ident: bytes) -> Session | None:
+    # pop the session
+    session = session_table.pop(ident, None)
+    if session is not None:
+        assert isinstance(session, Session)
+        prom.inc(SESSIONS_CLOSED)
+        # yeet an event at the worker. it doesn't really matter if this succeeds
+        if submit_event(session.worker_id, V1_FUNC_EXPIRED, ident, session_queue_ttl) is None:
+            Log.w(tag, 'can\'t send expiration event - event queue full!!! is the server overloaded?')
+    return session
+
+
 class RequestHandler(BaseRequestHandler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -367,15 +379,15 @@ class RequestHandler(BaseRequestHandler):
 
         Log.d(tag, 'request to end session')
 
-        # pop the session
-        if session_table.pop(ident, None) is None:
-            Log.v(tag, 'session does not exist in table, it may have already expired')
+        # close the session
+        session = close_session(tag, ident)
+        if session is not None:
+            Log.v(tag, 'session did not exist in table, it may have already expired')
             self.request.sendall(V1_OK)  # this is still a success
             return
 
         Log.v(tag, 'ended session')
         prom.inc(SESSIONS_ENDED)
-        prom.inc(SESSIONS_CLOSED)
         self.request.sendall(V1_OK)
 
     def resume_v1(self, tag):
@@ -401,8 +413,12 @@ class RequestHandler(BaseRequestHandler):
 
         Log.d(tag, 'session resume, updating target worker')
         # todo: test rapid resumption, there might be issues with race conditions
+        old_worker = session.worker_id
         session.worker_id = self.worker_id  # update session to be reachable at new worker id
-        # rely on the client closing the connection for now
+
+        # send a "rerouted" event to the old worker. if this fails, it's fine because the client probably already closed the connection
+        if submit_event(old_worker, V1_FUNC_EXPIRED, ident, session_queue_ttl) is None:
+            Log.w(tag, 'can\'t send rerouted event - event queue full!!! is the server overloaded?')
 
         self.request.sendall(V1_OK)
         prom.inc(SESSIONS_RECONNECTED)
@@ -487,10 +503,10 @@ def maintain():
                 if session is None:
                     continue
                 elif time() - session.last_contact > session_timeout:
-                    if session_table.pop(ident, None) is not None:
+                    session = close_session(tag, ident)
+                    if session is not None:
                         Log.i(tag, 'expired session:', UUID(bytes=ident))
                         prom.inc(SESSIONS_EXPIRED)
-                        prom.inc(SESSIONS_CLOSED)
 
         except BaseException as e:
             Log.wtf('maintenance thread threw exception!!', e)
@@ -511,6 +527,7 @@ def load_config():
     global prom
     global event_queue_size
     global click_queue_ttl
+    global session_queue_ttl
     global poll_time
 
     config = read_config()
@@ -527,6 +544,7 @@ def load_config():
     event_queue_size = config.get('event_queue_size', DEFAULT_EVENT_QUEUE_SIZE)
     poll_time = config.get('poll_time', DEFAULT_POLL_TIME)
     click_queue_ttl = config.get('click_queue_ttl', DEFAULT_CLICK_QUEUE_TTL)
+    session_queue_ttl = config.get('session_queue_ttl', DEFAULT_SESSION_QUEUE_TTL)
     if isinstance(prom, PrometheusStub):
         p = config.get('prometheus', {})
         if p.get('export', False):
@@ -543,6 +561,7 @@ global socket_timeout
 global socket_addr
 global event_queue_size
 global click_queue_ttl
+global session_queue_ttl
 global poll_time
 prom = PrometheusStub()
 

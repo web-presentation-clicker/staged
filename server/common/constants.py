@@ -12,6 +12,8 @@ V1_FUNC_NEXT = 0x81.to_bytes()
 V1_FUNC_PREV = 0x82.to_bytes()
 V1_FUNC_HELLO = 0x83.to_bytes()
 V1_FUNC_END = 0x84.to_bytes()
+V1_FUNC_EXPIRED = 0x85.to_bytes()
+V1_FUNC_REROUTED = 0x86.to_bytes()
 
 
 # responses
