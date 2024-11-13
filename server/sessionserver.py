@@ -425,13 +425,13 @@ class RequestHandler(BaseRequestHandler):
 
     def click_v1(self, tag, func):
         if func == V1_FUNC_HELLO:
-            labels = ['hello']
+            labels = 'hello'
             tag += ('hello',)
         elif func == V1_FUNC_NEXT:
-            labels = ['next_slide']
+            labels = 'next_slide'
             tag += ('next_slide',)
         elif func == V1_FUNC_PREV:
-            labels = ['prev_slide']
+            labels = 'prev_slide'
             tag += ('prev_slide',)
         else:
             # likely that the socket is out of sync
