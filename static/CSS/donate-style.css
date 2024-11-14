@@ -1,0 +1,41 @@
+body{
+    display: flex;
+    width: 100%;
+    text-align: center;
+}
+
+h1{
+    display: block;
+    text-align: center;
+}
+
+form{
+    justify-content: center;
+    width: 100%;
+}
+
+#name{
+    margin: 2em;
+}
+
+#email{
+    margin: 2em;
+}
+
+label{
+    margin-right: 2em;
+}
+
+.donate-button{
+    width: 5em;
+    height: 3em;
+    margin: 0.5em;
+}
+
+.money-rows{
+    margin: 1em;
+}
+
+#submit-reset{
+    margin: 1em;
+}
