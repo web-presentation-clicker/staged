@@ -412,7 +412,6 @@ class RequestHandler(BaseRequestHandler):
             return
 
         Log.d(tag, 'session resume, updating target worker')
-        # todo: test rapid resumption, there might be issues with race conditions
         old_worker = session.worker_id
         session.worker_id = self.worker_id  # update session to be reachable at new worker id
 

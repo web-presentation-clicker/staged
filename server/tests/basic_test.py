@@ -1,9 +1,10 @@
 import math
 from websocket import create_connection, WebSocketConnectionClosedException
-from threading import Thread, Semaphore
+from threading import Thread, Semaphore, Lock
 import time
 import requests as r
 import random
+import traceback
 
 
 # dev
@@ -110,7 +111,7 @@ class Presenter(object):
         try:
             self.ws.ping()
             return True
-        except OSError:
+        except (OSError, WebSocketConnectionClosedException):
             return False
 
     def end_session(self, disconnect: bool = True):
@@ -122,7 +123,10 @@ class Presenter(object):
 
     def disconnect(self):
         print(self.uuid, 'disconnecting socket')
-        self.ws.abort()  # don't be gentle
+        try:
+            self.ws.abort()  # don't be gentle
+        except OSError as e:
+            print('already disconnected:', e)
 
 
 def click(p: Presenter, event):
@@ -167,12 +171,16 @@ class SocketListener(object):
         self.t.start()
 
     def stop(self, block: bool = True):
-        t = self.t
-        if t is None:
+        if self.t is None:
             return
         print('killing socket listener')
         self.die = True
         if block:
+            self.await_death()
+
+    def await_death(self):
+        t = self.t
+        if t is not None:
             t.join()
 
     def socket_loop(self):
@@ -195,6 +203,9 @@ class SocketListener(object):
         if self.capsem.acquire(timeout=timeout):
             return self.captured.pop(0)
         return None
+
+    def peek_all(self) -> [str]:
+        return self.captured
 
 
 class SingleSessionTest(object):
@@ -459,6 +470,118 @@ class SingleSessionTest(object):
         print('\nPASS\n')
         self.reset()
 
+    def test_rapid_resume(self, n_threads=16, duration=30):
+        # check for race conditions in session resume code
+        print('testing rapid session resumption')
+
+        self.new_session()
+        self.init_sock_loop()
+        self.n_synchronous_clicks(3)
+
+        die = False
+        error = []
+
+        # make it interesting
+        events_dropped = 0
+        events_clicked = {}
+        events_got = {}
+        events_got_unsorted = []
+        for ev in CLICK_EVENTS:
+            events_clicked[ev] = 0
+            events_got[ev] = 0
+
+        running_sem = Semaphore(n_threads)
+
+        def resume_loop():
+            with running_sem:
+                try:
+                    # each loop has its own client running in parallel
+                    rtest = SingleSessionTest()
+                    while not die:
+                        rtest.resume_session(self.p.uuid)
+                        rtest.init_sock_loop()
+
+                        # test both server and client side termination
+                        if random.randint(0, 1):
+                            rtest.wait_for_presenter_disconnect(5)
+                        else:
+                            rtest.p.disconnect()
+
+                        # dump all the events to process later
+                        rtest.loop.await_death()
+                        events_got_unsorted.extend(rtest.loop.peek_all())
+
+                except BaseException as ex:
+                    print('resume loop threw!!!', ex)
+                    error.append(ex)
+
+        threads = [Thread(target=resume_loop) for _ in range(n_threads)]
+        self.p.disconnect()
+
+        print('starting rapid resumption across', n_threads, 'threads')
+        [t.start() for t in threads]
+
+        stop_at = time.time() + duration
+
+        # send a bunch of events to contribute to the chaos
+        while time.time() < stop_at:
+            ev = random.choice(CLICK_EVENTS)
+            result = click(self.p, ev)
+            events_clicked[ev] += 1
+            if result != 200:
+                events_dropped += 1
+
+        print('stopping resume loop')
+        die = True
+        # one connection should win
+        for _ in range(n_threads - 1):
+            assert running_sem.acquire(timeout=1)
+
+        print('resuming session back to main thread')
+        self.resume_session()
+        self.init_sock_loop()
+        self.n_synchronous_clicks(3)
+
+        assert running_sem.acquire(timeout=1)
+
+        print('waiting for all resume loops to terminate')
+        [t.join() for t in threads]
+
+        # if there were errors, this is a failure
+        if len(error) != 0:
+            print('there were errors:')
+            for e in error:
+                traceback.print_exception(e)
+            assert False
+
+        # count events
+        for event in events_got_unsorted:
+            assert event in CLICK_EVENTS
+            events_got[event] += 1
+
+        # lost events are unavoidable without additional delivery confirmation, but they should be rare.
+        # as such this is mostly informational, but an arbitrary 20% maximum for lost events is required
+        total_sent = sum(events_clicked.values())
+        total_got = len(events_got_unsorted)
+        lost = total_sent - total_got - events_dropped
+        lost_percent = lost / total_sent * 100
+        print('=================================================================')
+        print('sent', total_sent, 'events. received', total_got, 'events. failed to send', events_dropped, 'events.', 'there are', lost, 'events unaccounted for.')
+        print()
+        print('clicked:', events_clicked)
+        print('got:', events_got)
+        print('dropped:', events_dropped)
+        print('lost:', '%.2f%%' % lost_percent)
+        print('=================================================================')
+
+        assert lost_percent <= 20.0
+
+        self.n_synchronous_clicks(3)
+        self.p.disconnect()
+
+        print('\nPASS\n')
+        self.reset()
+
     def test_expire(self, max_expire=30):
         # session should expire if the clicker never connects before the timeout
         print('testing no clicker expire')
@@ -577,6 +700,8 @@ test.test_socket_ping()
 test.test_many_clicks()
 
 test.test_resume()
+
+test.test_rapid_resume(16, 60)
 
 # it is recommended to set your config values low so this test doesn't take forever
 # max_expire_time = session_timeout + maintenance_interval + tolerance
