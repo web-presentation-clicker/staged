@@ -381,7 +381,7 @@ class RequestHandler(BaseRequestHandler):
 
         # close the session
         session = close_session(tag, ident)
-        if session is not None:
+        if session is None:
             Log.v(tag, 'session did not exist in table, it may have already expired')
             self.request.sendall(V1_OK)  # this is still a success
             return
