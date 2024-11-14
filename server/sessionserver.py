@@ -417,7 +417,8 @@ class RequestHandler(BaseRequestHandler):
         session.worker_id = self.worker_id  # update session to be reachable at new worker id
 
         # send a "rerouted" event to the old worker. if this fails, it's fine because the client probably already closed the connection
-        if submit_event(old_worker, V1_FUNC_EXPIRED, ident, session_queue_ttl) is None:
+        # only send this if the worker doesn't match, otherwise it will terminate the session that was just resumed
+        if self.worker_id != old_worker and submit_event(old_worker, V1_FUNC_REROUTED, ident, session_queue_ttl) is None:
             Log.w(tag, 'can\'t send rerouted event - event queue full!!! is the server overloaded?')
 
         self.request.sendall(V1_OK)
