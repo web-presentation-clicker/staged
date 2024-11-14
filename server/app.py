@@ -238,9 +238,12 @@ def do_socket_v1(tag, env):
 
         # make callback
         with callback_table_lock:
-            if callback_table.get(ident) is not None:
-                # this one could happen
-                callback_table.pop(ident)
+            # check for old callback; i.e. if this listener was just previously connected to this worker
+            old_loop = callback_table.pop(ident, None)
+            if old_loop is not None:
+                old_loop.submit(WebSocketEvent(V1_FUNC_REROUTED, session_queue_ttl))  # disregard result (it doesn't matter)
+
+            # add new callback
             cb = WebSocketCallback()
             callback_table[ident] = cb
 
