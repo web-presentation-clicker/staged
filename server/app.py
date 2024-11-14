@@ -192,6 +192,7 @@ def do_socket_v1(tag, env):
                 ev.claim()
                 ev.result = V1_COMM_FAIL
                 ev.done()
+                ev = cb.pop(0)
 
     elif action.startswith(V1_EVENT_RESUME_PFX):
         tag += ('resume',)
@@ -265,6 +266,7 @@ def do_socket_v1(tag, env):
                 ev.claim()
                 ev.result = V1_COMM_FAIL
                 ev.done()
+                ev = cb.pop(0)
     else:
         # no
         return
