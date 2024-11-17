@@ -31,42 +31,38 @@ class PrometheusStub(object):
     def start(self):
         pass
 
-    def inc(self, key, amount: int = 1, labels=None):
+    def inc(self, key, amount: int | float = 1, labels=None):
         pass
 
-    def dec(self, key, amount: int = 1, labels=None):
+    def dec(self, key, amount: int | float = 1, labels=None):
         pass
 
     def set(self, key, value, labels=None):
         pass
 
 
-SOCKETS_OPENED = 'sock_opened'
-SOCKETS_CLOSED = 'sock_closed'
-# revise
-#SESSIONS_ACTIVE = 'sess_active'
-SESSIONS_OPENED = 'sess_opened'
-SESSIONS_CLOSED = 'sess_closed'
-SESSIONS_EXPIRED = 'sess_expired'
-SESSIONS_ENDED = 'sess_ended'
-SESSIONS_RECONNECTED = 'sess_recon'
-QUEUE_DROPPED = 'queue_dropped'
+SOCKETS_OPENED = 'sockets_opened'
+SOCKETS_CLOSED = 'sockets_closed'
+SOCKETS_ACTIVE = 'sockets_active'
+SOCKETS_COMMANDS = 'sockets_commands'
+SESSIONS_OPENED = 'sessions_opened'
+SESSIONS_CLOSED = 'sessions_closed'
+SESSIONS_EXPIRED = 'sessions_expired'
+SESSIONS_ENDED = 'sessions_ended'
+SESSIONS_RECONNECTED = 'sessions_reconnected'
 MAINTENANCE_TIME = 'maintenance_time'
 MAINTENANCE_LOOPS = 'maintenance_loops'
-MAINTENANCE_LAST_TS = 'maintenance_last_ts'
-MAINTENANCE_FAILS = 'maintenance_fail'
-# add
-#MAINTENANCE_TIME_LAST
-# delete these
+MAINTENANCE_LAST_TS = 'maintenance_last_timestamp'
+MAINTENANCE_FAILS = 'maintenance_failures'
+MAINTENANCE_TIME_LAST = 'maintenance_time_last'
 CLICKS_SUCC = 'events_suc'
 CLICKS_FAIL = 'events_fail'
-CLICKS_PENDING = 'events_pending'
-# add
-#EVENTS_QUEUED
-#EVENTS_SENT
-#EVENTS_FAILED
-#EVENT_QUEUE_REJECTIONS
-#EVENTS_EXPIRED
+EVENTS_QUEUED = 'events_queued'
+EVENTS_COMPLETED = 'events_completed'
+EVENTS_FAILED = 'events_failed'
+EVENTS_FATAL = 'events_fatal'
+EVENTS_REJECTED = 'events_rejected'
+EVENTS_EXPIRED = 'events_expired'
 
 
 class PrometheusHelper(PrometheusStub):
@@ -80,38 +76,50 @@ class PrometheusHelper(PrometheusStub):
     def start(self):
         Log.i('starting prometheus metrics server on %s:%i' % (self._addr, self._port))
         start_http_server(self._port, self._addr)
-        self._metrics[SOCKETS_OPENED] = Counter(self._pfx + 'sockets_opened', 'total number of opened sockets')
-        self._metrics[SOCKETS_CLOSED] = Counter(self._pfx + 'sockets_closed', 'total number of closed sockets')
-        # self._metrics[SESSIONS_ACTIVE] = Gauge(self._pfx + 'sessions_active', 'currently active sessions')
-        self._metrics[SESSIONS_OPENED] = Counter(self._pfx + 'sessions_opened', 'total number of opened sessions')
-        self._metrics[SESSIONS_CLOSED] = Counter(self._pfx + 'sessions_closed', 'total number of closed sessions')
-        self._metrics[SESSIONS_EXPIRED] = Counter(self._pfx + 'sessions_expired', 'total number of expired sessions')
-        self._metrics[SESSIONS_ENDED] = Counter(self._pfx + 'sessions_ended', 'total number of explicitly ended sessions')
-        self._metrics[SESSIONS_RECONNECTED] = Counter(self._pfx + 'sessions_reconnected', 'total number of session reconnections')
-        self._metrics[QUEUE_DROPPED] = Counter(self._pfx + 'queue_dropped', 'total number of dropped events in the send queue, indicative of server overload')
-        self._metrics[MAINTENANCE_TIME] = Counter(self._pfx + 'maintenance_time', 'total time spent in seconds doing maintenance jobs')
-        self._metrics[MAINTENANCE_LOOPS] = Counter(self._pfx + 'maintenance_loops', 'total number of maintenance jobs run')
-        self._metrics[MAINTENANCE_LAST_TS] = Gauge(self._pfx + 'maintenance_last_timestamp', 'timestamp of the last successful maintenance job\'s completion')
-        self._metrics[MAINTENANCE_FAILS] = Counter(self._pfx + 'maintenance_failures', 'total number of failed maintenance jobs')
-        self._metrics[CLICKS_SUCC] = Counter(self._pfx + 'events_succeeded', 'total number of successful events', ['type'])
-        self._metrics[CLICKS_FAIL] = Counter(self._pfx + 'events_failed', 'total number of failed events', ['type'])
-        self._metrics[CLICKS_PENDING] = Gauge(self._pfx + 'events_pending', 'total number of events that are still sending', ['type'])
+        self._metrics[SOCKETS_OPENED] = Counter(self._pfx + SOCKETS_OPENED, 'total number of opened sockets')
+        self._metrics[SOCKETS_CLOSED] = Counter(self._pfx + SOCKETS_CLOSED, 'total number of closed sockets')
+        self._metrics[SOCKETS_ACTIVE] = Gauge(self._pfx + SOCKETS_ACTIVE, 'total number of sockets actively doing things')
+        self._metrics[SOCKETS_COMMANDS] = Counter(self._pfx + SOCKETS_COMMANDS, 'total number of socket commands received')
+        self._metrics[SESSIONS_OPENED] = Counter(self._pfx + SESSIONS_OPENED, 'total number of opened sessions')
+        self._metrics[SESSIONS_CLOSED] = Counter(self._pfx + SESSIONS_CLOSED, 'total number of closed sessions')
+        self._metrics[SESSIONS_EXPIRED] = Counter(self._pfx + SESSIONS_EXPIRED, 'total number of expired sessions')
+        self._metrics[SESSIONS_ENDED] = Counter(self._pfx + SESSIONS_ENDED, 'total number of explicitly ended sessions')
+        self._metrics[SESSIONS_RECONNECTED] = Counter(self._pfx + SESSIONS_RECONNECTED, 'total number of session reconnections')
+        self._metrics[MAINTENANCE_TIME] = Counter(self._pfx + MAINTENANCE_TIME, 'total time spent in seconds doing maintenance jobs')
+        self._metrics[MAINTENANCE_TIME_LAST] = Gauge(self._pfx + MAINTENANCE_TIME_LAST, 'time spent in seconds during the last maintenance job')
+        self._metrics[MAINTENANCE_LOOPS] = Counter(self._pfx + MAINTENANCE_LOOPS, 'total number of maintenance jobs run')
+        self._metrics[MAINTENANCE_LAST_TS] = Gauge(self._pfx + MAINTENANCE_LAST_TS, 'timestamp of the last successful maintenance job\'s completion')
+        self._metrics[MAINTENANCE_FAILS] = Counter(self._pfx + MAINTENANCE_FAILS, 'total number of failed maintenance jobs')
+        # pre-populate with 0s
+        for metric in self._metrics:
+            self.inc(metric, 0)
 
-    def inc(self, key, amount: int = 1, labels=None):
+        self._metrics[EVENTS_QUEUED] = Counter(self._pfx + EVENTS_QUEUED, 'total number of events inserted into the event queue', ['type'])
+        self._metrics[EVENTS_COMPLETED] = Counter(self._pfx + EVENTS_COMPLETED, 'total number of events handled', ['type'])
+        self._metrics[EVENTS_FAILED] = Counter(self._pfx + EVENTS_FAILED, 'total number of events that completed normally with an error', ['type'])
+        self._metrics[EVENTS_FATAL] = Counter(self._pfx + EVENTS_FATAL, 'total number of events that failed an an unexpected way', ['type'])
+        self._metrics[EVENTS_REJECTED] = Counter(self._pfx + EVENTS_REJECTED, 'total number of events dropped due to the event queue being full. indicative of server overload', ['type'])
+        self._metrics[EVENTS_EXPIRED] = Counter(self._pfx + EVENTS_EXPIRED, 'total number of events that expired in the queue. indicitave of server overload', ['type'])
+        # pre-populate with 0s for each event type the session server sends
+        for metric in [EVENTS_QUEUED, EVENTS_COMPLETED, EVENTS_FAILED, EVENTS_FATAL, EVENTS_REJECTED, EVENTS_EXPIRED]:
+            for func in [V1_FUNC_NEXT, V1_FUNC_PREV, V1_FUNC_HELLO, V1_FUNC_EXPIRED, V1_FUNC_REROUTED]:
+                self.inc(metric, 0, labels=(V1_FUNC_NAME_MAP[func],))
+
+    def inc(self, key, amount: int | float = 1, labels=None):
         if labels is not None:
-            self._metrics.get(key).labels(labels).inc(amount)
+            self._metrics.get(key).labels(*labels).inc(amount)
             return
         self._metrics.get(key).inc(amount)
 
-    def dec(self, key, amount: int = 1, labels=None):
+    def dec(self, key, amount: int | float = 1, labels=None):
         if labels is not None:
-            self._metrics.get(key).labels(labels).dec(amount)
+            self._metrics.get(key).labels(*labels).dec(amount)
             return
         self._metrics.get(key).dec(amount)
     
-    def set(self, key, value, labels = None):
+    def set(self, key, value, labels=None):
         if labels is not None:
-            self._metrics.get(key).labels(labels).set(value)
+            self._metrics.get(key).labels(*labels).set(value)
             return
         self._metrics.get(key).set(value)
 
@@ -129,6 +137,7 @@ class ClickEvent(QueueItem):
     def __init__(self, event_type, uuid_b, ttl):
         self.event_type = event_type
         self.uuid_b = uuid_b
+        self.func_name = V1_FUNC_NAME_MAP.get(event_type, '‽')
         super().__init__(ttl)
 
     def g_tag(self):
@@ -140,9 +149,13 @@ def submit_event(worker_id, event_type, uuid_b, ttl):
     if queue is None:
         # generally, this shouldn't happen
         raise KeyError('no listeners connected for destination worker')
-    item = queue.submit(ClickEvent(event_type, uuid_b, ttl))
+    event = ClickEvent(event_type, uuid_b, ttl)
+    item = queue.submit(event)
     if item is None:
-        prom.inc(QUEUE_DROPPED)
+        V1_FUNC_NAME_MAP.get(event_type)
+        prom.inc(EVENTS_REJECTED, labels=(event.func_name,))
+    else:
+        prom.inc(EVENTS_QUEUED, labels=(event.func_name,))
     return item
 
 
@@ -252,7 +265,12 @@ class RequestHandler(BaseRequestHandler):
                 raise BrokenPipeError('sender connection died according to poll')
 
             # execute command
-            self.command_v1(self.tag)
+            prom.inc(SOCKETS_COMMANDS)
+            prom.inc(SOCKETS_ACTIVE)
+            try:
+                self.command_v1(self.tag)
+            finally:
+                prom.dec(SOCKETS_ACTIVE)
 
     def init_listener(self):
         self.tag = ('listener',)
@@ -300,6 +318,7 @@ class RequestHandler(BaseRequestHandler):
             if not event.claim():
                 # expired, server may be overloaded. throw it out.
                 Log.w(self.tag, 'Server may be overloaded!!! expired event pulled from queue, it is', time() - event.created, 'seconds old!!!')
+                prom.inc(EVENTS_EXPIRED, labels=(event.func_name,))
 
             Log.d(self.tag, 'event claimed!')
 
@@ -309,33 +328,33 @@ class RequestHandler(BaseRequestHandler):
                 self.request.sendall(event.uuid_b)
 
                 result = self.request.recv(1)
+                if result != V1_OK:
+                    prom.inc(EVENTS_FAILED, labels=(event.func_name,))
                 event.result = result
             except BaseException as e:
                 # if there are any connection problems, the socket is in an inconsistent state and must restart
                 event.error = True
+                prom.inc(EVENTS_FATAL, labels=(event.func_name,))
                 raise e
             finally:
                 # always inform of finish, otherwise it will hang forever after claiming
                 event.done()
+                prom.inc(EVENTS_COMPLETED, labels=(event.func_name,))
 
     def command_v1(self, tag):
         # read function
         func = self.request.recv(1)
+        tag += (V1_FUNC_NAME_MAP.get(func, '‽'),)
 
         if func == V1_FUNC_CREATE_SESSION:      # create session
-            tag += ('new',)
             self.create_session_v1(tag)
-        elif func in [V1_FUNC_NEXT, V1_FUNC_PREV, V1_FUNC_HELLO]:  # click
-            tag += ('click',)
+        elif func in V1_CLICK_FUNCS:            # click
             self.click_v1(tag, func)
         elif func == V1_FUNC_RESUME:            # resume
-            tag += ('resume',)
             self.resume_v1(tag)
         elif func == V1_FUNC_END:               # end
-            tag += ('end',)
             self.end_v1(tag)
         else:
-            tag += ('nofunc',)
             Log.w(tag, 'invalid func value')
             self.request.sendall(V1_GEN_FAIL)
 
@@ -424,19 +443,6 @@ class RequestHandler(BaseRequestHandler):
         prom.inc(SESSIONS_RECONNECTED)
 
     def click_v1(self, tag, func):
-        if func == V1_FUNC_HELLO:
-            labels = 'hello'
-            tag += ('hello',)
-        elif func == V1_FUNC_NEXT:
-            labels = 'next_slide'
-            tag += ('next_slide',)
-        elif func == V1_FUNC_PREV:
-            labels = 'prev_slide'
-            tag += ('prev_slide',)
-        else:
-            # likely that the socket is out of sync
-            raise Panic('invalid function for click_v1')
-
         # get/validate uuid
         ident = self.read_uuid()
         uuid_s = UUID(bytes=ident)
@@ -450,35 +456,25 @@ class RequestHandler(BaseRequestHandler):
 
         # forward event to relevant queue
         Log.v(tag, 'forwarding event')
-        prom.inc(CLICKS_PENDING, labels=labels)
         try:
             event = submit_event(session.worker_id, func, ident, click_queue_ttl)
             if event is None:
                 Log.w(tag, 'event queue full!!! server overloaded?')
                 self.request.sendall(V1_GEN_FAIL)
-                prom.inc(CLICKS_FAIL, labels=labels)
                 return
 
             event.wait_for_result()
-
             if event.result == V1_OK:
-                prom.inc(CLICKS_SUCC, labels=labels)
                 session.alive()
-            else:
-                prom.inc(CLICKS_FAIL, labels=labels)
         except KeyError as e:
-            # generally this should not happen, but it's not the socket's fault
+            # worker doesn't exist. generally this should not happen, but it's not this socket's fault, so don't throw
             Log.wtf(tag, 'is the uwsgi app down?', e)
-            prom.inc(CLICKS_FAIL, labels=labels)
             self.request.sendall(V1_GEN_FAIL)
             return
         except BaseException as e:
             # unexpected error, things may be broken
-            prom.inc(CLICKS_FAIL, labels=labels)
             self.request.sendall(V1_GEN_FAIL)
             raise e
-        finally:
-            prom.dec(CLICKS_PENDING, labels=labels)
 
         # send result
         Log.d(tag, 'event result arrived, forwarding')
@@ -508,6 +504,7 @@ def maintain():
                         Log.i(tag, 'expired session:', UUID(bytes=ident))
                         prom.inc(SESSIONS_EXPIRED)
 
+            prom.set(MAINTENANCE_LAST_TS, time() * 1000)
         except BaseException as e:
             Log.wtf('maintenance thread threw exception!!', e)
             prom.inc(MAINTENANCE_FAILS)
@@ -515,7 +512,7 @@ def maintain():
             dur = time() - start
             prom.inc(MAINTENANCE_LOOPS)
             prom.inc(MAINTENANCE_TIME, dur)
-            prom.set(MAINTENANCE_LAST_TS, time() * 1000)
+            prom.set(MAINTENANCE_TIME_LAST, dur)
         sleep(maintenance_interval)
 
 

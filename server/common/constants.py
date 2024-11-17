@@ -15,6 +15,18 @@ V1_FUNC_END = 0x84.to_bytes()
 V1_FUNC_EXPIRED = 0x85.to_bytes()
 V1_FUNC_REROUTED = 0x86.to_bytes()
 
+V1_FUNC_NAME_MAP = {
+    V1_FUNC_CREATE_SESSION: 'create session',
+    V1_FUNC_RESUME: 'resume',
+    V1_FUNC_NEXT: 'next slide',
+    V1_FUNC_PREV: 'prev slide',
+    V1_FUNC_HELLO: 'hello',
+    V1_FUNC_END: 'end',
+    V1_FUNC_EXPIRED: 'expired',
+    V1_FUNC_REROUTED: 'rerouted',
+}
+V1_CLICK_FUNCS = {V1_FUNC_HELLO, V1_FUNC_NEXT, V1_FUNC_PREV}
+
 
 # responses
 V1_OK = 0x11.to_bytes()
