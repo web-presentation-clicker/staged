@@ -1,9 +1,11 @@
+import os
+import stat
 import select
 from socket import AF_UNIX
 from socketserver import UnixStreamServer, ThreadingMixIn, BaseRequestHandler
 from threading import Thread, Lock
 from uuid import uuid4, UUID
-from common.log import Log, concurrent_logging, ansi_logging, log_level
+from common.log import Log, concurrent_logging, ansi_logging, log_level, shutdown_printer
 from common.constants import *
 from common.config import read_config
 from common.pool_queue import Queue, QueueItem
@@ -244,7 +246,7 @@ class RequestHandler(BaseRequestHandler):
     def sender_loop(self):
         poll = select.poll()
         poll.register(self.request, POLL_CHECK_FLAGS)
-        while True:
+        while not die:
             # wait for command
             ev = poll.poll(int(poll_time * 1000))
             if len(ev) == 0:
@@ -292,7 +294,7 @@ class RequestHandler(BaseRequestHandler):
         poll = select.poll()
         poll.register(self.request, POLL_DEATH_FLAGS)
         queue = listener_table[self.worker_id]
-        while True:
+        while not die:
             # get an event from top of the queue
             event = queue.pop(timeout=poll_time)
             if event is None:
@@ -567,23 +569,57 @@ if __name__ == '__main__':
     # this is multithreaded enough to cause issues with regular logging
     concurrent_logging(True)
 
-    # check compatibility
     try:
-        AF_UNIX
-    except NameError:
-        Log.e(tag, 'Sorry! Only unix is supported at the moment.')
-        exit(1)
+        # check compatibility
+        try:
+            AF_UNIX
+        except NameError:
+            Log.e(tag, 'Sorry! Only unix is supported at the moment.')
+            exit(1)
 
-    server = SessionServer(socket_addr, RequestHandler)
-    server.allow_reuse_address = True
+        try:
+            sock_stat = os.stat(socket_addr)
+            if stat.S_ISSOCK(sock_stat.st_mode):
+                Log.wtf(tag, 'session server socket already exists:', socket_addr)
+                Log.wtf(tag, 'this could be because there is already another session server running, or it crashed')
+                Log.wtf(tag, 'if you are sure there is no other session server running, delete the socket and start the server again')
+            else:
+                Log.wtf(tag, 'something exists at the configured socket address, and it\'s not a socket:', socket_addr)
+                Log.wtf(tag, 'please ensure the configured socket address does not exist and start the server again')
+            exit(1)
+        except FileNotFoundError:
+            Log.i(tag, 'starting server at unix domain socket:', socket_addr)
 
-    maintenance_t = Thread(target=maintain)
-    maintenance_t.start()
+        server = SessionServer(socket_addr, RequestHandler)
+        server.allow_reuse_address = True
 
-    with server:
-        Log.i(tag, 'starting server at unix domain socket:', socket_addr)
-        #spawn(server.serve_forever).join()
-        server.serve_forever()
-        die = True
-        maintenance_t.join()
-        server.shutdown()
+        maintenance_t = Thread(target=maintain)
+        maintenance_t.start()
+
+        with server:
+            #spawn(server.serve_forever).join()
+            try:
+                Log.v(tag, 'serving forever, SIGINT to stop')
+                server.serve_forever()
+            except KeyboardInterrupt:
+                pass
+
+            Log.i(tag, 'shutting down')
+
+            Log.v(tag, 'deleting unix domain socket')
+            os.remove(socket_addr)
+
+            Log.v(tag, 'killing maintenance thread')
+            die = True
+            maintenance_t.join()
+
+            Log.v(tag, 'shutting down socket server')
+            server.shutdown()
+
+            Log.i('waiting for remaining connections to close')
+
+    finally:
+        Log.v(tag, 'killing logger thread')
+        shutdown_printer()
+        Log.i('cya')
+
