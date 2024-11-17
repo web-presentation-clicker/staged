@@ -319,6 +319,7 @@ class RequestHandler(BaseRequestHandler):
                 # expired, server may be overloaded. throw it out.
                 Log.w(self.tag, 'Server may be overloaded!!! expired event pulled from queue, it is', time() - event.created, 'seconds old!!!')
                 prom.inc(EVENTS_EXPIRED, labels=(event.func_name,))
+                continue
 
             Log.d(self.tag, 'event claimed!')
 
