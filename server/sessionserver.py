@@ -212,16 +212,6 @@ class RequestHandler(BaseRequestHandler):
             raise e
         finally:
             prom.inc(SOCKETS_CLOSED)
-
-    def read_null_terminated(self):
-        # this was used for worker id initially but is now unused
-        # todo: delete this
-        result = bytes()
-        b = self.request.recv(1)
-        while b != NULL:
-            result += b
-            b = self.request.recv(1)
-        return result
     
     def read_len_first(self):
         n = int.from_bytes(self.request.recv(1))
