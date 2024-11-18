@@ -45,21 +45,57 @@ def ws_send(msg: bytes):
     uwsgi.websocket_send(msg)
 
 
-def ws_send_err(msg: str):
-    ws_send(('ERR: %s' % msg).encode('ascii'))
+def ws_send_err(msg: bytes, can_retry: bool = False, nonce: bytes | None = None):
+    event = V1_EVENT_ERR_PFX + msg
+    if not can_retry:
+        event += V1_EVENT_ERR_NO_SESSION_SFX
+    if nonce is not None:
+        event = nonce + event
+
+    ws_send(event)
 
 
-def do_socket_loop_v1(tag, ident: bytes, cb):
-    while True:
-        # wait for event
-        event = cb.pop(timeout=ws_poll_time)
+def parse_uuid_from_client(tag, action: bytes, pfx, nonce = None) -> None | uuid.UUID:
+    if len(action) > len(pfx) + 40:
+        Log.w(tag, 'uuid too long')
+        return None  # no
 
-        try:
-            # ensure socket alive
-            ws_cmd = uwsgi.websocket_recv_nb()
+    uuid_r = action[len(pfx):].decode('ascii')
 
-            # handle websocket cmd
-            if ws_cmd is not None:
+    if len(uuid_r) == 0:
+        ws_send_err(V1_EVENT_ERR_CLIENT, False, nonce)
+        return
+
+    try:
+        return uuid.UUID(uuid_r)
+    except ValueError:
+        Log.i(tag, 'got badly formed uuid from client, aborting')
+        return None
+
+
+def do_socket_loop_v1(tag, ident: bytes):
+    # make callback
+    with callback_table_lock:
+        # check for old callback; i.e. if this listener was just previously connected to this worker
+        old_loop = callback_table.pop(ident, None)
+        if old_loop is not None:
+            assert isinstance(old_loop, WebSocketCallback)
+            old_loop.submit(WebSocketEvent(V1_FUNC_REROUTED, session_queue_ttl))  # disregard result (it doesn't matter)
+
+        # add new callback
+        cb = WebSocketCallback()
+        callback_table[ident] = cb
+
+    try:
+        while True:
+            # wait for event
+            event = cb.pop(timeout=ws_poll_time)
+
+            try:
+                # ensure socket alive
+                ws_cmd = uwsgi.websocket_recv_nb()
+
+                # handle websocket cmd
                 if ws_cmd == V1_EVENT_END:
                     Log.d(tag, 'session ending')
                     # yeet this at the session server and don't check for a result, it doesn't matter
@@ -71,237 +107,199 @@ def do_socket_loop_v1(tag, ident: bytes, cb):
                         event.result = V1_COMM_FAIL
                     return
 
-            # event?
-            if event is None:
-                continue  # nothing to do
+                # event?
+                if event is None:
+                    continue  # nothing to do
 
-            # event valid?
-            if not event.claim():
-                Log.w(tag, 'got expired event. server overloaded???')
-                continue
+                # event valid?
+                if not event.claim():
+                    Log.w(tag, 'got expired event. server overloaded???')
+                    continue
 
-            # execute event
-            Log.d(tag, 'session server command')
-            if event.event_type == V1_FUNC_HELLO:
-                ws_send(V1_EVENT_HELLO)
-            elif event.event_type == V1_FUNC_NEXT:
-                ws_send(V1_EVENT_NEXT)
-            elif event.event_type == V1_FUNC_PREV:
-                ws_send(V1_EVENT_PREV)
-            elif event.event_type == V1_FUNC_REROUTED:
-                Log.d(tag, 'rerouted!')
-                event.result = V1_OK
-                return
-            elif event.event_type == V1_FUNC_EXPIRED:
-                Log.d(tag, 'expired!')
-                ws_send_err('session expired')
-                event.result = V1_OK
-                return
-            else:
-                # this should never happen
-                Log.wtf(tag, 'session server sent unknown command')
-                raise Panic('unknown func from session server')
+                # execute event
+                Log.d(tag, 'session server command')
 
-            event.result = V1_OK
+                click_ev = {
+                    V1_FUNC_HELLO: V1_EVENT_HELLO,
+                    V1_FUNC_NEXT: V1_EVENT_NEXT,
+                    V1_FUNC_PREV: V1_EVENT_PREV,
+                }.get(event.event_type)
 
-        except OSError as e:
-            Log.v(tag, 'web socket died:', str(e))
-            if event is not None:
-                event.result = V1_COMM_FAIL
-            return
-        except BaseException as e:
-            if event is not None:
-                event.error = True
-            raise e
-        finally:
-            if event is not None:
-                # set comm error if no result
-                if event.result is None and not event.error:
+                if click_ev is not None:
+                    ws_send(click_ev)
+                    event.result = V1_OK
+                elif event.event_type == V1_FUNC_REROUTED:
+                    Log.d(tag, 'rerouted!')
+                    event.result = V1_OK
+                    return
+                elif event.event_type == V1_FUNC_EXPIRED:
+                    Log.d(tag, 'expired!')
+                    ws_send_err(V1_EVENT_ERR_EXPIRED, False)
+                    event.result = V1_OK
+                    return
+                else:
+                    # this should never happen
+                    raise_panic(tag, 'unknown func from session server')
+
+            except OSError as e:
+                Log.v(tag, 'web socket died:', str(e))
+                if event is not None:
                     event.result = V1_COMM_FAIL
-                event.done()
+                return
+            except BaseException as e:
+                if event is not None:
+                    event.error = True
+                raise e
+            finally:
+                if event is not None:
+                    # set comm error if no result
+                    if event.result is None and not event.error:
+                        event.result = V1_COMM_FAIL
+                    event.done()
+    finally:
+        # remove from table
+        cb.gone = True
+        with callback_table_lock:
+            if callback_table.get(ident) == cb:
+                callback_table.pop(ident)
+
+        # flush remaining events
+        ev = cb.pop(0)
+        while ev is not None:
+            ev.claim()
+            ev.result = V1_COMM_FAIL
+            ev.done()
+            ev = cb.pop(0)
 
 
-def do_socket_v1(tag, env):
+def do_create_init_v1(tag, env):
+    # serialize ip address
     addr = env['REMOTE_ADDR']
-    action = uwsgi.websocket_recv().decode('ascii')
+    if ':' in addr:
+        addr_flag = 0x1.to_bytes()
+        ip_addr_b = ipv6_addr_bytes(addr)
+    else:
+        addr_flag = 0x0.to_bytes()
+        ip_addr_b = ipv4_addr_bytes(addr)
+
+    # compile payload
+    payload = (V1_FUNC_CREATE_SESSION
+               + addr_flag
+               + ip_addr_b)
+
+    # make session
+    cmd = submit_command(payload, 16, session_queue_ttl)
+    if cmd is None:  # queue full
+        Log.w(tag, 'command queue full!!! server overloaded?')
+        ws_send_err(V1_EVENT_ERR_OVERLOADED)
+        return
+    cmd.wait_for_result()
+
+    # errors
+    if cmd.result_code == V1_NO_SESSION:
+        Log.i(tag, 'session server refused, likely rate limited')
+        ws_send_err(V1_EVENT_ERR_OVERLOADED)
+        return
+    elif cmd.result_code == V1_GEN_FAIL:
+        Log.e(tag, 'session server encountered general failure')
+        return
+    elif cmd.result_code != V1_OK:
+        raise_panic(tag, 'unexpected new session result')
+
+    ident = cmd.result  # session uuid
+    uuid_s = uuid.UUID(bytes=ident)
+    tag += (uuid_s,)
+
+    Log.i(tag, 'new session')
+    ws_send(('uuid: %s' % uuid_s).encode('ascii'))
+
+    # loop
+    do_socket_loop_v1(tag, ident)
+
+
+def do_resume_init_v1(tag, ident):
+    Log.i(tag, 'session resuming')
+
+    # compile payload
+    payload = (V1_FUNC_RESUME + ident)
+
+    # resume session
+    cmd = submit_command(payload, 0, session_queue_ttl)
+    if cmd is None:  # queue full
+        Log.w(tag, 'command queue full!!! server overloaded?')
+        ws_send_err(V1_EVENT_ERR_OVERLOADED, True)
+        return
+    cmd.wait_for_result()
+
+    result = cmd.result_code
+    if result == V1_NO_SESSION:
+        ws_send_err(V1_EVENT_ERR_EXPIRED, False)
+        return
+    elif result == V1_GEN_FAIL:
+        ws_send_err(V1_EVENT_ERR_UNKNOWN, True)
+        return
+    elif result != V1_OK:
+        raise_panic(tag, 'unexpected session resume result')
+
+    Log.v(tag, 'session resume')
+    ws_send(V1_EVENT_RESUMED)
+
+    # loop
+    do_socket_loop_v1(tag, ident)
+
+
+def do_socket_v1(tag, env, poll):
+    poll.poll(500)     # these should be sent in rapid succession
+    action = uwsgi.websocket_recv_nb()
 
     if action == V1_EVENT_NEW:
         tag += ('new',)
-
-        # serialize ip address
-        if ':' in addr:
-            addr_flag = 0x1.to_bytes()
-            ip_addr_b = ipv6_addr_bytes(addr)
-        else:
-            addr_flag = 0x0.to_bytes()
-            ip_addr_b = ipv4_addr_bytes(addr)
-
-        # compile payload
-        payload = (V1_FUNC_CREATE_SESSION
-                   + addr_flag
-                   + ip_addr_b)
-
-        # make session
-        cmd = submit_command(payload, 16, session_queue_ttl)
-        if cmd is None:  # queue full
-            Log.w(tag, 'command queue full!!! server overloaded?')
-            ws_send_err('try again')
-            return
-        cmd.wait_for_result()
-
-        if cmd.result_code == V1_NO_SESSION:
-            Log.i(tag, 'session server refused, likely rate limited')
-            ws_send_err('sorry, we can\'t do that right now')
-            return
-        elif cmd.result_code == V1_GEN_FAIL:
-            Log.e(tag, 'session server encountered general failure')
-            raise Exception('session server general failure')
-        elif cmd.result_code != V1_OK:
-            Log.e(tag, 'unexpected new session result')
-            raise Panic('unexpected new session result')
-
-        ident = cmd.result  # session uuid
-        uuid_s = uuid.UUID(bytes=ident)
-        tag += (uuid_s,)
-        Log.i(tag, 'new session')
-
-        # make callback (I know it isn't really a callback, but it's close enough)
-        with callback_table_lock:
-            if callback_table.get(ident) is not None:
-                # that isn't really supposed to happen
-                raise Panic('callback already exists for brand new session, this is a bug. ...or a very specific sequence of service restarts and the worst luck')
-
-            cb = WebSocketCallback()
-            callback_table[ident] = cb
-
-        try:
-            ws_send(('uuid: %s' % uuid_s).encode('ascii'))
-
-            # loop
-            do_socket_loop_v1(tag, ident, cb)
-        finally:
-            # remove from table
-            cb.gone = True
-            with callback_table_lock:
-                if callback_table.get(ident) == cb:
-                    callback_table.pop(ident)
-
-            # flush remaining events
-            ev = cb.pop(0)
-            while ev is not None:
-                ev.claim()
-                ev.result = V1_COMM_FAIL
-                ev.done()
-                ev = cb.pop(0)
+        do_create_init_v1(tag, env)
 
     elif action.startswith(V1_EVENT_RESUME_PFX):
         tag += ('resume',)
-        uuid_r = action[len(V1_EVENT_RESUME_PFX):]
-        if len(uuid_r) == 0:
-            ws_send_err('client error')
+        uuid_s = parse_uuid_from_client(tag, action, V1_EVENT_RESUME_PFX)
+        if uuid_s is None:
             return
+        tag += (uuid_s,)
+        ident = uuid_s.bytes
 
-        try:
-            Log.d(tag, uuid_r)
-            uuid_s = uuid.UUID(uuid_r)
-            ident = uuid_s.bytes
-        except ValueError:
-            Log.i(tag, 'got badly formed uuid from client, aborting')
-            return
+        do_resume_init_v1(tag, ident)
 
-        tag = (addr, 'resume', uuid_s)
-        Log.i(tag, 'session resuming')
-
-        # compile payload
-        payload = (V1_FUNC_RESUME
-                   + ident)
-
-        # resume session
-        cmd = submit_command(payload, 0, session_queue_ttl)
-        if cmd is None:  # queue full
-            Log.w(tag, 'command queue full!!! server overloaded?')
-            ws_send_err('try again')
-            return
-        cmd.wait_for_result()
-
-        result = cmd.result_code
-        if result == V1_NO_SESSION:
-            ws_send_err('session expired')
-            return
-        elif result == V1_GEN_FAIL:
-            ws_send_err('internal error')
-            return
-        elif result != V1_OK:
-            Log.e(tag, 'unexpected session resume result')
-            raise Exception('unexpected session resume result')
-
-        Log.v(tag, 'session resume')
-
-        # make callback
-        with callback_table_lock:
-            # check for old callback; i.e. if this listener was just previously connected to this worker
-            old_loop = callback_table.pop(ident, None)
-            if old_loop is not None:
-                old_loop.submit(WebSocketEvent(V1_FUNC_REROUTED, session_queue_ttl))  # disregard result (it doesn't matter)
-
-            # add new callback
-            cb = WebSocketCallback()
-            callback_table[ident] = cb
-
-        try:
-            ws_send(b'resumed')
-
-            # loop
-            do_socket_loop_v1(tag, ident, cb)
-        finally:
-            # remove from table
-            cb.gone = True
-            with callback_table_lock:
-                if callback_table.get(ident) == cb:
-                    callback_table.pop(ident)
-
-            # flush remaining events
-            ev = cb.pop(0)
-            while ev is not None:
-                ev.claim()
-                ev.result = V1_COMM_FAIL
-                ev.done()
-                ev = cb.pop(0)
     else:
         # no
-        return
+        Log.d(tag, 'unknown action sent by client')
 
 
 def do_socket(tag, env):
     try:
-        ws_fd = uwsgi.connection_fd()
         # honestly 4 seconds might be too graceful
         poll = ge_poll()
-        poll.register(ws_fd, POLL_CHECK_FLAGS)
+        poll.register(uwsgi.connection_fd(), POLL_CHECK_FLAGS)
         events = poll.poll(4000)
 
         if len(events) == 0:
             Log.w(tag, 'received nothing within 4 seconds, closing connection')
             return
-        
-        ver = uwsgi.websocket_recv_nb().decode('ascii')
 
-        if ver == 'v1':
+        ver = uwsgi.websocket_recv_nb()
+
+        if ver == V1_WS_VERSION:
             tag += ('v1',)
-            do_socket_v1(tag, env)
+            do_socket_v1(tag, env, poll)
         else:
             tag += ('v?',)
-            ws_send_err('unsupported client')
+            ws_send_err(V1_EVENT_ERR_UNSUPPORTED, True)
 
     except OSError as e:
         if str(e) == 'unable to receive websocket message':
             Log.v(tag, 'web socket died, according to exception')
             return
-        ws_send_err('unexpected error')
+        ws_send_err(V1_EVENT_ERR_UNKNOWN, True)
         raise e
-    except Exception as e:
+    except BaseException as e:
         Log.e(tag, 'uncaught error in socket:', e)
-        ws_send_err('unexpected error')
+        ws_send_err(V1_EVENT_ERR_UNKNOWN, True)
         raise e
 
 
@@ -328,21 +326,21 @@ def rest_v1(tag, env: dict, sr, headers, path: str, uuid_s: uuid.UUID):
     cmd.wait_for_result()
     result = cmd.result_code
 
+    # errors
     if result == V1_NO_SESSION:
         sr('401 Unauthorized', headers)
         return 'session expired'.encode('utf-8')
     elif result == V1_COMM_FAIL:
         sr('406 Not Acceptable', headers)
         return 'peer unavailable'.encode('utf-8')
-    elif result == V1_OK:
-        sr('200 OK', headers)
-        return 'sent'.encode('utf-8')
     elif result == V1_GEN_FAIL:
         sr('500 Problem', headers)
         return 'internal error'.encode('utf-8')
-    else:
-        Log.e(tag, 'unexpected click result')
-        raise Panic('unexpected click result')
+    elif result != V1_OK:
+        raise_panic(tag, 'unexpected click result')
+
+    sr('200 OK', headers)
+    return 'sent'.encode('utf-8')
 
 
 def application(env, sr):

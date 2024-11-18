@@ -40,12 +40,25 @@ V1_PING = 0X12.to_bytes()
 NULL = 0x00.to_bytes()
 
 # websocket events
-V1_EVENT_NEW = 'new'
-V1_EVENT_RESUME_PFX = 'resume: '
+V1_WS_VERSION = b'v1'
+V1_EVENT_NEW = b'new'
+V1_EVENT_RESUME_PFX = b'resume: '
+V1_EVENT_RESUMED = b'resumed'
+V1_EVENT_CLICKER_PFX = b'click: '
 V1_EVENT_HELLO = b'hello'
 V1_EVENT_NEXT = b'next_slide'
 V1_EVENT_PREV = b'prev_slide'
 V1_EVENT_END = b'end'
+V1_EVENT_OK = b'ok'
+
+V1_EVENT_ERR_PFX = b'ERR: '
+V1_EVENT_ERR_EXPIRED = b'session expired'
+V1_EVENT_ERR_CLIENT = b'client error'
+V1_EVENT_ERR_UNREACHABLE = b'peer unavailable'
+V1_EVENT_ERR_OVERLOADED = b'try again'  # vague error message
+V1_EVENT_ERR_UNSUPPORTED = b'unsupported client'
+V1_EVENT_ERR_UNKNOWN = b'internal error'
+V1_EVENT_ERR_NO_SESSION_SFX = b'.'
 
 # poll flags
 POLL_DEATH_FLAGS = POLLHUP | POLLRDHUP | POLLNVAL | POLLERR

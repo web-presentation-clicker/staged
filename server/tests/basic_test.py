@@ -124,7 +124,7 @@ class SingleSessionTest(object):
     def wait_for_presenter_expire(self, timeout=30):
         print('waiting for presenter expire...')
         s = time.time()
-        assert self.loop.pop(timeout) == 'ERR: session expired'
+        assert self.loop.pop(timeout) == 'ERR: session expired.'
         f = time.time()
         duration = f - s
         print('took', duration, 'seconds for session to expire')
@@ -220,7 +220,7 @@ class SingleSessionTest(object):
             print('server did not reject connection!!!')
             assert False
         except SocketErrorEvent as e:
-            assert e.error_msg == 'session expired'
+            assert e.error_msg == 'session expired.'
             self.wait_for_presenter_disconnect(2)
 
         print('\nPASS\n')
