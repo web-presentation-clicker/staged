@@ -1,17 +1,15 @@
 import math
-from websocket import WebSocketConnectionClosedException
 from threading import Thread, Semaphore
 import time
 import random
 import traceback
-from client import click, Presenter, SocketListener, SocketErrorEvent
+from client import click, Presenter, SocketErrorEvent
 from event_constants import *
 
 
 class SingleSessionTest(object):
     def __init__(self):
         self.p = Presenter()
-        self.loop = None
 
     def reset(self):
         print('resetting\n')
@@ -19,10 +17,6 @@ class SingleSessionTest(object):
             print('Unclosed socket!!!')
             self.p.disconnect()
         self.p = Presenter()
-
-        if self.loop is not None:
-            self.loop.stop()
-        self.loop = None
 
     def new_session(self):
         if self.p is None:
@@ -34,21 +28,15 @@ class SingleSessionTest(object):
             self.p = Presenter()
         self.p.resume_session(uuid)
 
-    def init_sock_loop(self):
-        if self.loop is not None:
-            self.loop.stop(False)
-        self.loop = SocketListener(self.p)
-        self.loop.start()
-
     def n_synchronous_clicks(self, n=500, expect=200):
         print('sending', n, 'events synchronously')
         for i in range(n):
             print()
-            assert self.loop.pop(0) is None
+            assert self.p.pop(0) is None
             ev = random.choice(CLICK_EVENTS)
             assert click(self.p, ev) == expect
-            assert self.loop.pop(0.1) == ev
-            assert self.loop.pop(0) is None
+            assert self.p.pop(0.1) == ev
+            assert self.p.pop(0) is None
 
         print('\nPASS\n')
 
@@ -56,6 +44,7 @@ class SingleSessionTest(object):
         print('sending', n, 'events asynchronously across', n_threads, 'threads')
         expected_events = [random.choice(CLICK_EVENTS) for _ in range(n)]
         events = expected_events.copy()
+        errors = []
 
         def loop():
             try:
@@ -64,10 +53,14 @@ class SingleSessionTest(object):
             except IndexError:
                 print('hit end of event list')
                 return
+            except BaseException as e:
+                print('error in async click loop:', e)
+                errors.append(e)
+                raise e
 
         threads = [Thread(target=loop) for _ in range(n_threads)]
 
-        assert self.loop.pop(0) is None
+        assert self.p.pop(0) is None
         print('spinning up threads')
         [t.start() for t in threads]
 
@@ -81,12 +74,19 @@ class SingleSessionTest(object):
         # wait for threads
         [t.join() for t in threads]
 
+        # if there were errors, this is a failure
+        if len(errors) != 0:
+            print('there were errors:')
+            for e in errors:
+                traceback.print_exception(e)
+            assert False
+
         print('validating')
-        ev = self.loop.pop(0.1)
+        ev = self.p.pop(0.1)
         while ev is not None:
             assert ev in CLICK_EVENTS
             actual_counts[ev] += 1
-            ev = self.loop.pop(0.1)
+            ev = self.p.pop(0.1)
 
         print('expected:', expected_counts, '\nactual:', actual_counts)
         assert expected_counts == actual_counts
@@ -124,7 +124,7 @@ class SingleSessionTest(object):
     def wait_for_presenter_expire(self, timeout=30):
         print('waiting for presenter expire...')
         s = time.time()
-        assert self.loop.pop(timeout) == 'ERR: session expired.'
+        assert self.p.pop(timeout) == 'ERR: session expired.'
         f = time.time()
         duration = f - s
         print('took', duration, 'seconds for session to expire')
@@ -142,10 +142,10 @@ class SingleSessionTest(object):
 
         for i in range(loops):
             ev = random.choice(CLICK_EVENTS)
-            assert self.loop.pop(0) is None
+            assert self.p.pop(0) is None
             result = click(self.p, ev)
             if result == 200:
-                assert self.loop.pop(0.1) == ev
+                assert self.p.pop(0.1) == ev
             if result == until:
                 return True
             assert result == expect
@@ -156,7 +156,6 @@ class SingleSessionTest(object):
         # the server should close the connection when the extension explicitly ends the session
         print('testing end with no disconnect')
         self.new_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(3)
         self.end_session_no_disconnect()
 
@@ -166,7 +165,6 @@ class SingleSessionTest(object):
         # the server also shouldn't break if the client ends the connection
         print('testing end with disconnect')
         self.new_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(3)
         self.end_session()
 
@@ -177,10 +175,9 @@ class SingleSessionTest(object):
         # the socket ping should be ignored by the server
         print('testing socket ping')
         self.new_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(3)
         self.p.ws.send(EVENT_PING)
-        assert self.loop.pop(0.5) is None
+        assert self.p.pop(0.5) is None
         self.n_synchronous_clicks(3)
         self.end_session()
 
@@ -191,7 +188,6 @@ class SingleSessionTest(object):
         # the server should be able to handle clicks very well. that's its whole job anyway.
         print('testing clicks')
         self.new_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(1000)             # many clicks
         self.n_async_clicks(4000, threads)         # many clicks very fast
         self.end_session()
@@ -207,8 +203,10 @@ class SingleSessionTest(object):
             self.resume_session('not-a-real-uuid')
             print('server did not reject connection!!!')
             assert False
-        except WebSocketConnectionClosedException as _:
-            pass  # success
+        except TimeoutError as e:
+            assert str(e) == 'did not get confirmation in time'
+            assert not self.p.is_connected()
+            # success
 
         print('\nPASS\n')
         self.reset()
@@ -220,7 +218,8 @@ class SingleSessionTest(object):
             print('server did not reject connection!!!')
             assert False
         except SocketErrorEvent as e:
-            assert e.error_msg == 'session expired.'
+            assert e.error_msg == 'session expired'
+            assert not e.session_valid
             self.wait_for_presenter_disconnect(2)
 
         print('\nPASS\n')
@@ -229,14 +228,12 @@ class SingleSessionTest(object):
         # server should allow resuming after connection is lost
         print('testing resume after connection loss')
         self.new_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(3)
         for i in range(10):
             print('testing resumptions (%i/10)' % (i+1))
             self.p.disconnect()
             assert click(self.p, EVENT_HELLO) == 406
             self.resume_session()
-            self.init_sock_loop()
             self.n_synchronous_clicks(3)
         self.end_session()
 
@@ -246,25 +243,21 @@ class SingleSessionTest(object):
         # server should disconnect old socket without an error when resuming
         print('testing old socket termination on resume')
         self.new_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(3)
         for i in range(10):
             print('testing resumptions (%i/10)' % (i+1))
 
             # swap out presenter
             old_presenter = self.p
-            old_loop = self.loop
             self.p = None
-            self.loop = None
 
             # reconnect with new connection
             self.resume_session(old_presenter.uuid)
-            self.init_sock_loop()
             self.n_synchronous_clicks(3)
 
             # verify that old connection "cleanly" disconnected
             assert not old_presenter.is_connected()
-            assert old_loop.pop(0) is None
+            assert old_presenter.pop(0) is None
         self.end_session()
 
         print('\nPASS\n')
@@ -275,7 +268,6 @@ class SingleSessionTest(object):
         print('testing rapid session resumption')
 
         self.new_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(3)
 
         die = False
@@ -299,7 +291,6 @@ class SingleSessionTest(object):
                     rtest = SingleSessionTest()
                     while not die:
                         rtest.resume_session(self.p.uuid)
-                        rtest.init_sock_loop()
 
                         # test both server and client side termination
                         if random.randint(0, 1):
@@ -308,8 +299,8 @@ class SingleSessionTest(object):
                             rtest.p.disconnect()
 
                         # dump all the events to process later
-                        rtest.loop.await_death()
-                        events_got_unsorted.extend(rtest.loop.peek_all())
+                        rtest.p.loop.await_death()
+                        events_got_unsorted.extend(rtest.p.peek_all())
 
                 except BaseException as ex:
                     print('resume loop threw!!!', ex)
@@ -339,7 +330,6 @@ class SingleSessionTest(object):
 
         print('resuming session back to main thread')
         self.resume_session()
-        self.init_sock_loop()
         self.n_synchronous_clicks(3)
 
         assert running_sem.acquire(timeout=1)
@@ -386,7 +376,6 @@ class SingleSessionTest(object):
         # session should expire if the clicker never connects before the timeout
         print('testing no clicker expire')
         self.new_session()
-        self.init_sock_loop()
         self.wait_for_presenter_expire(max_expire)
         self.wait_for_presenter_disconnect()
 
@@ -396,10 +385,8 @@ class SingleSessionTest(object):
         # the above should also work after a resume
         print('testing no clicker expire after resume')
         self.new_session()
-        self.init_sock_loop()
         self.p.disconnect()
         self.resume_session()
-        self.init_sock_loop()
         self.wait_for_presenter_expire(max_expire)
         self.wait_for_presenter_disconnect()
 
@@ -409,7 +396,6 @@ class SingleSessionTest(object):
         # session should expire with no clicker activity
         print('testing clicker stop expire')
         self.new_session()
-        self.init_sock_loop()
         self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.wait_for_presenter_expire(max_expire)
         self.wait_for_presenter_disconnect()
@@ -420,12 +406,10 @@ class SingleSessionTest(object):
         # the above should also work after a resume
         print('testing clicker stop expire after resume')
         self.new_session()
-        self.init_sock_loop()
         self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
         assert click(self.p, EVENT_HELLO) == 406
         self.resume_session()
-        self.init_sock_loop()
         self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.wait_for_presenter_expire(max_expire)
         self.wait_for_presenter_disconnect()
@@ -436,7 +420,6 @@ class SingleSessionTest(object):
         # session should expire if the presenting device disconnects, even if the clicker still pings
         print('testing presenter death expire')
         self.new_session()
-        self.init_sock_loop()
         self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
         self.wait_for_clicker_expire(max_expire)
@@ -447,12 +430,10 @@ class SingleSessionTest(object):
         # the above should also work after a resume
         print('testing presenter death expire after resume')
         self.new_session()
-        self.init_sock_loop()
         self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
         assert click(self.p, EVENT_HELLO) == 406
         self.resume_session()
-        self.init_sock_loop()
         self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
         self.wait_for_clicker_expire(max_expire)
@@ -463,7 +444,6 @@ class SingleSessionTest(object):
         # session should expire even if the presenting device disconnects and the clicker never connected
         print('testing no presenter expire')
         self.new_session()
-        self.init_sock_loop()
         self.p.disconnect()
         print('waiting for maximum expiration time')
         time.sleep(max_expire)
@@ -476,11 +456,9 @@ class SingleSessionTest(object):
         # the above should work even after resume
         print('testing no presenter expire after resume')
         self.new_session()
-        self.init_sock_loop()
         self.p.disconnect()
         assert click(self.p, EVENT_HELLO) == 406
         self.resume_session()
-        self.init_sock_loop()
         self.p.disconnect()
         print('waiting for maximum expiration time')
         time.sleep(max_expire)
