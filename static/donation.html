@@ -4,45 +4,41 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=0">
     <link href="CSS/donate-style.css" type="text/css" rel="stylesheet">
+    <script src="Scripts/landingScript.js" type="text/javascript"></script>
     <title>Donation</title>
 </head>
 <body>
-    <form>
+    <!--Hamburger menu icon-->
+    <button id="hamburger-menu" onclick="toggleMenu()">&#9776;</button>
+
+    <!--Navbar container  TO DO: link back to landing page's respective id's-->
+    <ul id="navbar-container">
+        <li><a href="#home">Home</a></li>
+        <li><a href="#instructions">Instructions</a></li>
+        <li><a href="#about">About</a></li>
+        <li><a href="#donate">Donate</a></li>
+    </ul>
+    <div id="donation-header">
         <h1>On-Stage</h1>
-        <h3> Donate Today </h3>
-        <div id="name">
-            <label>Name:
-                <input type="text" name="donor-name" placeholder="John Doe" required/>
-            </label>
-        </div>
+        <h3>If you've found our application useful, please consider donating to us!</h3>
+    </div>
 
-        <div id="email">
-            <labeL>Email:
-                <input type="email" name="donor-email" placeholder="your_email@email.com" required/>
-            </labeL>
-        </div>
+    <div class="icon-container">
+        <img src="img/Bitcoin.png" alt="Bitcoin Icon">
+        <p>Bitcoin Wallet Address:</p>
+    </div>
+    <div class="crypto-wallet">
+        <p>Bitcoin wallet address will go here</p>
+    </div>
 
-        <div class="money-rows">
-            <button type="button" class="donate-button">$1</button>
-            <button type="button" class="donate-button">$5</button>
-            <button type="button" class="donate-button">$10</button>
-        </div>
 
-        <div class="money-rows">
-            <button type="button" class="donate-button">$20</button>
-            <button type="button" class="donate-button">$50</button>
-            <button type="button" class="donate-button">$100</button>
-        </div>
+    <div class="icon-container">
+        <img src="img/monero.png" alt="Monero Icon">
+        <p>Monero Wallet Address:</p>
+    </div>
+    <div class="crypto-wallet">
+        <p>Monero wallet address will go here</p>
+    </div>
 
-        <label class="money-rows">Custom Amount:
-            <input type="text" name="custom-amount" placeholder="1000" maxlength="9"/>
-        </label>
-
-        <div id="submit-reset">
-            <button type="submit" class="donate-button">Submit</button>
-            <button type="reset" class="donate-button">Reset</button>
-        </div>
-
-    </form>
 </body>
 </html>

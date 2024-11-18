@@ -1,41 +1,100 @@
 body{
+    text-align: center;
+    margin-top: 5em;
+    margin-left: 0;
+    background-color: #c0c0c4;
+    font-family: inherit;
+}
+
+#hamburger-menu{
+    display: none;
+    font-size: 24px;
+    background: none;
+    border: none;
+    color: white;
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    cursor: pointer;
+    z-index: 1;
+}
+
+#navbar-container{
+    background-color: black;
+    color: white;
+    font-family: inherit;
+    font-weight: 600;
+    position: fixed;
+    top: 0;
+    width: 100%;
     display: flex;
-    width: 100%;
-    text-align: center;
-}
-
-h1{
-    display: block;
-    text-align: center;
-}
-
-form{
+    list-style-type: none;
+    padding: 5px 0;
+    margin: 0;
     justify-content: center;
-    width: 100%;
 }
 
-#name{
-    margin: 2em;
+#navbar-container li{
+    display: inline;
+    padding: 10px 20px;
 }
 
-#email{
-    margin: 2em;
+#navbar-container li:hover {
+    background-color: #FF671D;
 }
 
-label{
-    margin-right: 2em;
+#navbar-container li a{
+    text-decoration: none;
+    color: #FFF;
 }
 
-.donate-button{
-    width: 5em;
-    height: 3em;
-    margin: 0.5em;
+/*hide the navbar on small screens initially*/
+@media (max-width: 400px){
+    #navbar-container {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 50px;
+        width: 100%;
+        background-color: #000;
+    }
+
+    #navbar-container li{
+        display: block;
+        padding: 15px;
+        text-align: center;
+    }
+
+    #hamburger-menu {
+        display: block;
+        background-color: #000;
+    }
 }
 
-.money-rows{
-    margin: 1em;
+/* Shows the navbar when .show class is included */
+#navbar-container.show {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
 }
 
-#submit-reset{
-    margin: 1em;
+#donation-header{
+    padding-top: 30px;
+}
+
+.icon-container{
+    display: inline-block;
+}
+
+.icon-container img{
+    max-width: 100px;
+}
+
+.crypto-wallet{
+    display: block;
+}
+
+.crypto-wallet p{
+    font-size: 1em;
+    text-align: center;
 }
