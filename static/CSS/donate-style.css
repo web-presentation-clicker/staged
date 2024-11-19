@@ -99,8 +99,20 @@ body{
     font-size: 1em;
     text-align: center;
     padding: 3em;
-    background-color: #FFFFFF;
+    background-color: #FFF;
     width: fit-content;
     border: 2px solid #000;
+    border-radius: 2%;
+}
+
+.copy-container{
+    margin-left: 1em;
+    display: flex;
+    justify-content: center;
+}
+
+.copy-container button{
+    margin: auto;
+    padding: 1em;
     border-radius: 2%;
 }

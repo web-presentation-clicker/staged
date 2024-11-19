@@ -13,10 +13,10 @@
 
     <!--Navbar container  TO DO: link back to landing page's respective id's-->
     <ul id="navbar-container">
-        <li><a href="#home">Home</a></li>
-        <li><a href="#instructions">Instructions</a></li>
-        <li><a href="#about">About</a></li>
-        <li><a href="#donate">Donate</a></li>
+        <li><a href="index.html">Home</a></li>
+        <li><a href="index.html#instructions">Instructions</a></li>
+        <li><a href="index.html#about">About</a></li>
+        <li><a href="#donation-header">Donate</a></li>
     </ul>
     <div id="donation-header">
         <h1>On-Stage</h1>
@@ -28,7 +28,10 @@
         <p>Bitcoin Wallet Address:</p>
     </div>
     <div class="crypto-wallet">
-        <p>bc1qye4h2y46huzl7fx92mg2qgs57568zg8xyu0duq</p>
+        <p id="bitcoin-address">bc1qye4h2y46huzl7fx92mg2qgs57568zg8xyu0duq</p>
+        <div class="copy-container">
+            <button onclick="copyBitcoinAddress()">Copy Address</button>
+        </div>
     </div>
 
 
@@ -37,7 +40,10 @@
         <p>Monero Wallet Address:</p>
     </div>
     <div class="crypto-wallet">
-        <p>49Q7WqHfikLFyPr51ezejzQv92PuraVaDKypjyisfZUE8CJJDdNPVr3W6DBCTi79BgUFktPBPgWEoEmKeypVneN2QbT7zpt</p>
+        <p id="monero-address">49Q7WqHfikLFyPr51ezejzQv92PuraVaDKypjyisfZUE8CJJDdNPVr3W6DBCTi79BgUFktPBPgWEoEmKeypVneN2QbT7zpt</p>
+        <div class="copy-container">
+            <button onclick="copyMoneroAddress()">Copy Address</button>
+        </div>
     </div>
 
 </body>

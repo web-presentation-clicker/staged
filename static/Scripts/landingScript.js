@@ -21,4 +21,16 @@ function toggleMenu(){
     navbar.classList.toggle("show");
 }
 
+// Copies the Bitcoin wallet address
+function copyBitcoinAddress(){
+    let address = document.getElementById("bitcoin-address").textContent;
+    navigator.clipboard.writeText(address);
+}
+
+// Copies the Monero wallet address
+function copyMoneroAddress(){
+    let address = document.getElementById("monero-address").textContent;
+    navigator.clipboard.writeText(address);
+}
+
 window.onload = setDownloadLink;
