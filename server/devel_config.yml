@@ -77,16 +77,6 @@ websocket_queue_size: 4
 # and increase websocket command latency
 websocket_poll_time: 5
 
-# exporting metrics via prometheus with a port range
-# each worker will export its own prometheus, I couldn't think of a better solution
-# port numbers will be: start_port + worker_id - 1
-# if you have n workers, the port range will be from start_port to start_port + n - 1
-prometheus_uwsgi: # todo
-  export: True
-  start_port: 8001
-  addr: 127.0.0.1
-
-
 # CORS header value
 # this is primarily here for development purposes. you should preferably define headers in your nginx config.
 # an empty value sends no cors origin header (default)
