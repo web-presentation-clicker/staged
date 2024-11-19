@@ -249,8 +249,18 @@ def do_resume_init_v1(tag, ident):
 
 
 def do_socket_v1(tag, env, poll):
-    poll.poll(500)     # these should be sent in rapid succession
+    # poll will ignore the event and wait 500 ms if the client has already sent the action
     action = uwsgi.websocket_recv_nb()
+    if len(action) == 0:
+        events = poll.poll(500)     # these should be sent in rapid succession
+        if len(events) > 0:
+            if events[0][1] & POLLIN:
+                # this maybe could possibly block until the socket closes, but I can't do anything about that
+                # issue: https://github.com/unbit/uwsgi/issues/1716
+                Log.d(tag, 'using websocket_recv due to uwsgi bug')
+                action = uwsgi.websocket_recv()
+            else:
+                Log.w(tag, 'client sent no action within 500 ms')
 
     if action == V1_EVENT_NEW:
         tag += ('new',)
