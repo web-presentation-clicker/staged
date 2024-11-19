@@ -7,11 +7,12 @@ function setDownloadLink(){
 
     // Verify browser in use & set the link
     if(userAgent.includes("Chrome")){
-        downloadButton.href = ""    // path to Chrome extension -- TO BE ADDED
+        downloadButton.href = "https://chromewebstore.google.com/detail/web-presentation-clicker/";
     } else if (userAgent.includes("Firefox")){
-        downloadButton.href = ""    // path to Firefox extension -- TO BE ADDED
+        downloadButton.href = "https://addons.mozilla.org/en-US/firefox/addon/web-presentation-clicker/";
     }else {
-        downloadButton.href = ""    // default link -- TO BE ADDED
+        downloadButton.href = "#";
+        downloadButton.textContent = "Browser not supported";
     }
 }
 
