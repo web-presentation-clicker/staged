@@ -70,12 +70,22 @@ cmd_queue_size: 20
 # but high server load may change that.
 websocket_queue_size: 4
 
-# poll_time but for the websocket loop.
+# poll_time but for the presenter's websocket loop.
 # this may need to remain low, as this is the interval at which the websocket connection status is checked, and
 # websocket commands are read.
 # setting this too high will increase the time that these loops remain running after the websocket disconnects,
 # and increase websocket command latency
 websocket_poll_time: 5
+
+# maximum amount of time in milliseconds that the clicker socket connection will stay open without the clicker
+# sending anything. this should be higher than 20 seconds, since the clicker pings every 20 seconds
+clicker_inactivity_timeout: 60000
+
+# buffer size for nonces for clicker socket
+# this number is reported to the clicker, and specifies how many unique nonce values can be sent before the first
+# nonce is accepted again. making this greater than 254 is guaranteed to break everything because there are only 255
+# possible nonce values and NULL is reserved
+clicker_nonce_buffer_size: 5
 
 # CORS header value
 # this is primarily here for development purposes. you should preferably define headers in your nginx config.

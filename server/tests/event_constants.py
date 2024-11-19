@@ -3,5 +3,6 @@ EVENT_NEXT = 'next_slide'
 EVENT_PREV = 'prev_slide'
 EVENT_END = 'end'
 EVENT_PING = 'A'
+EVENT_OK = 'ok'
 
 CLICK_EVENTS = [EVENT_HELLO, EVENT_NEXT, EVENT_PREV]

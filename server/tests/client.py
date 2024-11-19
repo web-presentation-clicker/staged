@@ -100,17 +100,18 @@ class Presenter(SockClient):
         print('opening new session')
         try:
             self._init_connect()
-            self._init_loop()
 
             self.ws.send('v1')
             self.ws.send('new')
+
+            self._init_loop()
 
             result = self.pop(timeout)
             if result is None:
                 raise TimeoutError('did not get confirmation in time')
             elif result.startswith('uuid: '):
                 self.uuid = result[6:]
-                self.loop.tag = self.uuid
+                self.loop.tag = 'p ' + self.uuid
                 print('got session:', self.uuid)
             elif result.startswith('ERR: '):
                 err = result[5:]
@@ -167,6 +168,101 @@ class Presenter(SockClient):
         return self.loop.peek_all()
 
 
+# new and improved socket-based clicker
+class SockClicker(SockClient):
+    def __init__(self):
+        self.uuid = None
+        super().__init__(ssl, target)
+        self.nonce_lock = Lock()
+        self.rolling_nonce = 0x41
+        self.nonce_buffer_size = 5
+
+    @property
+    def tag(self):
+        if self.uuid is None:
+            return '(clicker, no session)'
+        return self.uuid
+
+    def _new_loop(self):
+        return ClickerSocketListener(self)
+
+    def _get_nonce(self):
+        with self.nonce_lock:
+            nonce = self.rolling_nonce
+            self.rolling_nonce += 1
+            if self.rolling_nonce > 0x79:  # the websocket library uses strings, so the nonce has to be a valid string. this is fine, I guess, just make it a valid string.
+                self.rolling_nonce = 0x41
+        return nonce.to_bytes(1)
+
+    def click(self, event):
+        nonce = self._get_nonce()
+        print(self.uuid, 'click! nonce=%s event=%s' % (nonce.hex(), event))
+        nonce = nonce.decode('ascii')
+        self.ws.send(nonce + event)
+        return nonce
+
+    def click_blocking(self, event, timeout=0.1):
+        s = time.time()
+        result = self.get_result(self.click(event), timeout)
+        f = time.time()
+        print(self.tag, 'click took', f - s, 'seconds!')
+        return result
+
+    def get_result(self, nonce, timeout=0.1):
+        result = self.pop(nonce, timeout)
+        if result is None:
+            return None
+        if result.startswith('ERR: '):
+            err = result[5:]
+            print('failed, error:', err)
+            raise SocketErrorEvent(err)
+        return result
+
+    def connect(self, uuid, timeout=1.0):
+        self.uuid = uuid
+        print('connecting clicker')
+        try:
+            self._init_connect()
+            self._init_loop()
+
+            self.ws.send('v1')
+            self.ws.send('click: ' + self.uuid)
+
+            result = self.get_result('\x00', timeout)
+            if result is None:
+                raise TimeoutError('did not get confirmation in time')
+            elif result != 'ok':
+                print('unexpected message from socket:', result)
+                raise Exception('unexpected message from socket')
+
+            print('connected as clicker to:', self.uuid)
+
+            result = self.get_result('\x00', timeout)
+            if result is None:
+                raise TimeoutError('did not get nonce buffer size in time')
+            elif not result.startswith('n-buff: '):
+                print('unexpected message from socket:', result)
+                raise Exception('unexpected message from socket')
+
+            self.nonce_buffer_size = int(result[8:])
+            print(self.tag, 'reported nonce buffer size:', self.nonce_buffer_size)
+
+        except Exception as e:
+            print('failed to connect:', e)
+            raise e
+
+    def pop(self, nonce, timeout: float | int | None = 0.1) -> str | None:
+        return self.loop.pop(nonce, timeout)
+
+    def peek_all(self) -> [str]:
+        return self.loop.peek_all()
+
+    def assert_eoq(self):
+        # "assert end-of-queue"
+        # this replaces `assert client.pop(0) is None` with the nonce system, since it adds a second dimension
+        assert len(self.peek_all()) == 0
+
+
 def click(p: Presenter, event):
     event = EVENT_ENDPOINT_MAP.get(event, event)
 
@@ -220,6 +316,7 @@ class SocketListener(object):
             t.join()
 
     def socket_loop(self):
+        print('loop ready')
         try:
             while not self.die:
                 func = self.ws.recv()
@@ -240,7 +337,7 @@ class SocketListener(object):
 
 class PresenterSocketListener(SocketListener):
     def __init__(self, p: Presenter):
-        super().__init__(p.ws, p.uuid)
+        super().__init__(p.ws, 'p ' + str(p.uuid))
         self.capsem = Semaphore(0)
         self.captured = []
 
@@ -255,3 +352,37 @@ class PresenterSocketListener(SocketListener):
     def _on_message(self, func):
         self.captured.append(func)
         self.capsem.release()
+
+
+class ClickerSocketListener(SocketListener):
+    def __init__(self, c: SockClicker):
+        super().__init__(c.ws, 'c ' + str(c.uuid))
+        self.lock = Lock()
+        self.captured = {}
+
+    def pop(self, nonce, timeout: float | int | None = 0.1) -> str | None:
+        deadline = time.time() + timeout
+        while deadline > time.time():
+            time.sleep(0.01)
+            with self.lock:
+                cap = self.captured.get(nonce, [])
+                if len(cap) > 0:
+                    event = cap.pop(0)
+                    if len(cap) == 0:
+                        self.captured.pop(nonce)
+                    return event
+
+        return None
+
+    def peek_all(self) -> [str]:
+        return self.captured
+
+    def _on_message(self, func):
+        nonce = func[:1]
+        event = func[1:]
+        with self.lock:
+            cap = self.captured.get(nonce)
+            if cap is None:
+                cap = []
+                self.captured[nonce] = cap
+            cap.append(event)

@@ -1,8 +1,9 @@
 from threading import Thread
 import time
 import traceback
+from client import click
 from event_constants import *
-from basic_test import SingleSessionTest
+from basic_legacy_test import SingleSessionTest
 
 
 ping_interval = 20
@@ -23,9 +24,9 @@ for ev in CLICK_EVENTS:
 def loop(s_test):
     try:
         while not die:
-            status = s_test.c.click_blocking(EVENT_HELLO)
-            if status != EVENT_OK:
-                raise Exception('expected status "ok" for hello, got: %s' % str(status))
+            status = click(s_test.p, EVENT_HELLO)
+            if status != 200:
+                raise Exception('expected 200 for hello, got: %s' % str(status))
             event = s_test.p.pop(5)
             if event != EVENT_HELLO:
                 raise Exception('expected hello event within 5 seconds, got: %s' % str(event))
@@ -35,9 +36,7 @@ def loop(s_test):
         error.append(ex)
     finally:
         s_test.p.disconnect()
-        s_test.c.disconnect()
         s_test.p.loop.stop()
-        s_test.c.loop.stop()
 
 
 threads = []
@@ -48,7 +47,6 @@ try:
     while True:
         test = SingleSessionTest()
         test.new_session()
-        test.connect_clicker()
 
         t = Thread(target=loop, args=(test,))
         t.start()

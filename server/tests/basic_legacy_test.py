@@ -3,14 +3,13 @@ from threading import Thread, Semaphore
 import time
 import random
 import traceback
-from client import Presenter, SocketErrorEvent, SockClicker
+from client import click, Presenter, SocketErrorEvent
 from event_constants import *
 
 
 class SingleSessionTest(object):
     def __init__(self):
         self.p = Presenter()
-        self.c = SockClicker()
 
     def reset(self):
         print('resetting\n')
@@ -19,46 +18,29 @@ class SingleSessionTest(object):
             self.p.disconnect()
         self.p = Presenter()
 
-        if self.c is not None and self.c.is_connected():
-            print('Unclosed socket!!!')
-            self.c.disconnect()
-        self.c = SockClicker()
-
     def new_session(self):
         if self.p is None:
             self.p = Presenter()
         self.p.new_session()
-
-    def connect_clicker(self, pop_ping=True):
-        if self.c is None:
-            self.c = SockClicker()
-        self.c.connect(self.p.uuid)
-
-        if pop_ping:
-            assert self.p.pop(0.1) == EVENT_HELLO
 
     def resume_session(self, uuid=None):
         if self.p is None:
             self.p = Presenter()
         self.p.resume_session(uuid)
 
-    def n_synchronous_clicks(self, n=500):
+    def n_synchronous_clicks(self, n=500, expect=200):
         print('sending', n, 'events synchronously')
         for i in range(n):
             print()
             assert self.p.pop(0) is None
             ev = random.choice(CLICK_EVENTS)
-            assert self.c.click_blocking(ev) == EVENT_OK
-            self.c.assert_eoq()
+            assert click(self.p, ev) == expect
             assert self.p.pop(0.1) == ev
             assert self.p.pop(0) is None
 
         print('\nPASS\n')
 
-    def n_async_clicks(self, n=2000, n_threads=4):
-        # note: this test fails with high thread counts.
-        # the high thread counts overflow the websocket buffer, dropping the events.
-        # this is intended functionality, and this test isn't very scientific anyway.
+    def n_async_clicks(self, n=2000, n_threads=4, expect=200):
         print('sending', n, 'events asynchronously across', n_threads, 'threads')
         expected_events = [random.choice(CLICK_EVENTS) for _ in range(n)]
         events = expected_events.copy()
@@ -67,9 +49,7 @@ class SingleSessionTest(object):
         def loop():
             try:
                 while True:
-                    result = self.c.click_blocking(events.pop(), 5)
-                    if result != EVENT_OK:
-                        raise AssertionError(str(result) + ' is not ' + EVENT_OK)
+                    assert click(self.p, events.pop()) == expect
             except IndexError:
                 print('hit end of event list')
                 return
@@ -93,8 +73,6 @@ class SingleSessionTest(object):
 
         # wait for threads
         [t.join() for t in threads]
-
-        self.c.assert_eoq()
 
         # if there were errors, this is a failure
         if len(errors) != 0:
@@ -154,46 +132,30 @@ class SingleSessionTest(object):
 
     def wait_for_clicker_expire(self, timeout=30, interval=1):
         print('waiting for clicker expire...')
+        assert self.clicker_ping_interval(interval, math.ceil(timeout / interval), 406, 401)
 
-        for i in range(math.ceil(timeout / interval)):
-            try:
-                ev = random.choice(CLICK_EVENTS)
-                assert self.p.pop(0) is None
-                self.c.click_blocking(ev)
-                assert False
-            except SocketErrorEvent as e:
-                if not e.session_valid and e.error_msg == 'session expired':
-                    break
-
-                assert e.session_valid
-                assert e.error_msg == 'peer unavailable'
-            time.sleep(interval)
-
-    def assert_unreachable(self):
-        try:
-            self.c.click_blocking(EVENT_HELLO)
-            assert False
-        except SocketErrorEvent as e:
-            assert e.session_valid
-            assert e.error_msg == 'peer unavailable'
-
-    def clicker_ping_interval(self, interval=1, loops=20, expect=EVENT_OK):
-        print('pinging every %i second(s) for %i seconds' % (interval, interval * loops))
+    def clicker_ping_interval(self, interval=1, loops=20, expect=200, until=None):
+        if until is not None:
+            print('pinging every %i second(s) for %i seconds until status %i' % (interval, interval * loops, until))
+        else:
+            print('pinging every %i second(s) for %i seconds' % (interval, interval * loops))
 
         for i in range(loops):
             ev = random.choice(CLICK_EVENTS)
             assert self.p.pop(0) is None
-            result = self.c.click_blocking(ev)
-            if result == EVENT_OK:
+            result = click(self.p, ev)
+            if result == 200:
                 assert self.p.pop(0.1) == ev
+            if result == until:
+                return True
             assert result == expect
             time.sleep(interval)
+        return until is None
 
     def test_end(self):
         # the server should close the connection when the extension explicitly ends the session
         print('testing end with no disconnect')
         self.new_session()
-        self.connect_clicker()
         self.n_synchronous_clicks(3)
         self.end_session_no_disconnect()
 
@@ -203,7 +165,6 @@ class SingleSessionTest(object):
         # the server also shouldn't break if the client ends the connection
         print('testing end with disconnect')
         self.new_session()
-        self.connect_clicker()
         self.n_synchronous_clicks(3)
         self.end_session()
 
@@ -214,7 +175,6 @@ class SingleSessionTest(object):
         # the socket ping should be ignored by the server
         print('testing socket ping')
         self.new_session()
-        self.connect_clicker()
         self.n_synchronous_clicks(3)
         self.p.ws.send(EVENT_PING)
         assert self.p.pop(0.5) is None
@@ -224,14 +184,12 @@ class SingleSessionTest(object):
         print('\nPASS\n')
         self.reset()
 
-    def test_many_clicks(self, threads=4):
+    def test_many_clicks(self, threads=8):
         # the server should be able to handle clicks very well. that's its whole job anyway.
         print('testing clicks')
         self.new_session()
-        self.connect_clicker()
         self.n_synchronous_clicks(1000)             # many clicks
-        # todo: async test broken because it's fundamentally pointless
-        # self.n_async_clicks(4000, threads)       # many clicks very fast
+        self.n_async_clicks(4000, threads)         # many clicks very fast
         self.end_session()
 
         print('\nPASS\n')
@@ -270,12 +228,11 @@ class SingleSessionTest(object):
         # server should allow resuming after connection is lost
         print('testing resume after connection loss')
         self.new_session()
-        self.connect_clicker()
         self.n_synchronous_clicks(3)
         for i in range(10):
             print('testing resumptions (%i/10)' % (i+1))
             self.p.disconnect()
-            self.assert_unreachable()
+            assert click(self.p, EVENT_HELLO) == 406
             self.resume_session()
             self.n_synchronous_clicks(3)
         self.end_session()
@@ -286,7 +243,6 @@ class SingleSessionTest(object):
         # server should disconnect old socket without an error when resuming
         print('testing old socket termination on resume')
         self.new_session()
-        self.connect_clicker()
         self.n_synchronous_clicks(3)
         for i in range(10):
             print('testing resumptions (%i/10)' % (i+1))
@@ -312,7 +268,6 @@ class SingleSessionTest(object):
         print('testing rapid session resumption')
 
         self.new_session()
-        self.connect_clicker()
         self.n_synchronous_clicks(3)
 
         die = False
@@ -360,19 +315,12 @@ class SingleSessionTest(object):
         stop_at = time.time() + duration
 
         # send a bunch of events to contribute to the chaos
-        try:
-            while time.time() < stop_at:
-                ev = random.choice(CLICK_EVENTS)
-                try:
-                    events_clicked[ev] += 1
-                    assert self.c.click_blocking(ev) == EVENT_OK
-                except SocketErrorEvent as e:
-                    assert e.session_valid
-                    events_dropped += 1
-        except BaseException as e:
-            # catch if main loop dies
-            error.append(e)
-            traceback.print_exception(e)
+        while time.time() < stop_at:
+            ev = random.choice(CLICK_EVENTS)
+            result = click(self.p, ev)
+            events_clicked[ev] += 1
+            if result != 200:
+                events_dropped += 1
 
         print('stopping resume loop')
         die = True
@@ -428,7 +376,6 @@ class SingleSessionTest(object):
         # session should expire if the clicker never connects before the timeout
         print('testing no clicker expire')
         self.new_session()
-        self.connect_clicker()
         self.wait_for_presenter_expire(max_expire)
         self.wait_for_presenter_disconnect()
 
@@ -438,7 +385,6 @@ class SingleSessionTest(object):
         # the above should also work after a resume
         print('testing no clicker expire after resume')
         self.new_session()
-        self.connect_clicker()
         self.p.disconnect()
         self.resume_session()
         self.wait_for_presenter_expire(max_expire)
@@ -450,8 +396,7 @@ class SingleSessionTest(object):
         # session should expire with no clicker activity
         print('testing clicker stop expire')
         self.new_session()
-        self.connect_clicker()
-        self.clicker_ping_interval(1, math.ceil(max_expire * 2))
+        self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.wait_for_presenter_expire(max_expire)
         self.wait_for_presenter_disconnect()
 
@@ -461,12 +406,11 @@ class SingleSessionTest(object):
         # the above should also work after a resume
         print('testing clicker stop expire after resume')
         self.new_session()
-        self.connect_clicker()
-        self.clicker_ping_interval(1, math.ceil(max_expire * 2))
+        self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
-        self.assert_unreachable()
+        assert click(self.p, EVENT_HELLO) == 406
         self.resume_session()
-        self.clicker_ping_interval(1, math.ceil(max_expire * 2))
+        self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.wait_for_presenter_expire(max_expire)
         self.wait_for_presenter_disconnect()
 
@@ -476,8 +420,7 @@ class SingleSessionTest(object):
         # session should expire if the presenting device disconnects, even if the clicker still pings
         print('testing presenter death expire')
         self.new_session()
-        self.connect_clicker()
-        self.clicker_ping_interval(1, math.ceil(max_expire * 2))
+        self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
         self.wait_for_clicker_expire(max_expire)
 
@@ -487,12 +430,11 @@ class SingleSessionTest(object):
         # the above should also work after a resume
         print('testing presenter death expire after resume')
         self.new_session()
-        self.connect_clicker()
-        self.clicker_ping_interval(1, math.ceil(max_expire * 2))
+        self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
-        self.assert_unreachable()
+        assert click(self.p, EVENT_HELLO) == 406
         self.resume_session()
-        self.clicker_ping_interval(1, math.ceil(max_expire * 2))
+        self.clicker_ping_interval(1, math.ceil(max_expire * 2), 200)
         self.p.disconnect()
         self.wait_for_clicker_expire(max_expire)
 
@@ -506,7 +448,7 @@ class SingleSessionTest(object):
         print('waiting for maximum expiration time')
         time.sleep(max_expire)
         print('session should be expired now')
-        self.wait_for_clicker_expire(0)
+        assert click(self.p, EVENT_HELLO) == 401
 
         print('\nPASS\n')
         self.reset()
@@ -515,12 +457,13 @@ class SingleSessionTest(object):
         print('testing no presenter expire after resume')
         self.new_session()
         self.p.disconnect()
+        assert click(self.p, EVENT_HELLO) == 406
         self.resume_session()
         self.p.disconnect()
         print('waiting for maximum expiration time')
         time.sleep(max_expire)
         print('session should be expired now')
-        self.wait_for_clicker_expire(0)
+        assert click(self.p, EVENT_HELLO) == 401
 
         print('\nPASS\n')
         self.reset()
@@ -533,7 +476,7 @@ if __name__ == '__main__':
 
     test.test_socket_ping()
 
-    test.test_many_clicks(4)
+    test.test_many_clicks(32)
 
     test.test_resume()
 
@@ -543,5 +486,6 @@ if __name__ == '__main__':
     # max_expire_time = session_timeout + maintenance_interval + tolerance
     max_expire_time = 8
     test.test_expire(max_expire_time)
+
 
     print('nothing blew up - PASS')

@@ -172,6 +172,68 @@ def do_socket_loop_v1(tag, ident: bytes):
             ev = cb.pop(0)
 
 
+def do_clicker_loop_v1(tag, ident, poll):
+    nonce_buffer = b''
+    for _ in range(clicker_nonce_buff_size):   # fill with nulls, the client shouldn't send nulls anyway
+        nonce_buffer += b'\x00'
+    while True:
+        # get next event
+        p_ev = poll.poll(clicker_inactivity_timeout)
+
+        if len(p_ev) == 0:  # timeout
+            Log.v(tag, 'disconnecting inactive clicker')
+            return
+
+        # get func
+        recv = uwsgi.websocket_recv_nb()
+        if len(recv) == 0:
+            continue
+
+        # first byte is nonce
+        nonce = recv[:1]
+        command = recv[1:]
+
+        # check nonce
+        if nonce_buffer.find(nonce) != -1:
+            continue  # duplicate event, discard
+
+        # rotate nonce buffer
+        nonce_buffer = nonce + nonce_buffer[:-1]
+
+        func = {
+            V1_EVENT_HELLO: V1_FUNC_HELLO,
+            V1_EVENT_NEXT: V1_FUNC_NEXT,
+            V1_EVENT_PREV: V1_FUNC_PREV,
+        }.get(command)
+        if func is None:
+            # don't do anything, it could be an unsupported feature
+            Log.d(tag, 'clicker sent unknown command')
+            continue
+
+        # send command
+        cmd = submit_command(func + ident, 0, click_queue_ttl)
+        if cmd is None:  # queue full
+            Log.w(tag, 'command queue full!!! server overloaded?')
+            ws_send_err(V1_EVENT_ERR_OVERLOADED, True, nonce)
+            continue
+
+        cmd.wait_for_result()
+        result = cmd.result_code
+
+        if result == V1_OK:
+            ws_send(nonce + V1_EVENT_OK)
+        elif result == V1_NO_SESSION:
+            ws_send_err(V1_EVENT_ERR_EXPIRED, False, nonce)
+            return
+        elif result == V1_COMM_FAIL:
+            ws_send_err(V1_EVENT_ERR_UNREACHABLE, True, nonce)
+        elif result == V1_GEN_FAIL:
+            ws_send_err(V1_EVENT_ERR_UNKNOWN, True, nonce)
+            return
+        else:
+            raise_panic(tag, 'unexpected click result from session server')
+
+
 def do_create_init_v1(tag, env):
     # serialize ip address
     addr = env['REMOTE_ADDR']
@@ -248,8 +310,37 @@ def do_resume_init_v1(tag, ident):
     do_socket_loop_v1(tag, ident)
 
 
+def do_clicker_init_v1(tag, ident, poll):
+    Log.i(tag, 'clicker connecting')
+    cmd = submit_command(V1_FUNC_HELLO + ident, 0, click_queue_ttl)
+
+    if cmd is None:  # queue full
+        Log.w(tag, 'command queue full!!! server overloaded?')
+        ws_send_err(V1_EVENT_ERR_OVERLOADED, True, NULL)
+        return
+
+    cmd.wait_for_result()
+    result = cmd.result_code
+
+    if result == V1_NO_SESSION:
+        ws_send_err(V1_EVENT_ERR_EXPIRED, False, NULL)
+        return
+    elif result == V1_COMM_FAIL:
+        ws_send_err(V1_EVENT_ERR_UNREACHABLE, True, NULL)
+        return
+    elif result == V1_GEN_FAIL:
+        ws_send_err(V1_EVENT_ERR_UNKNOWN, True, NULL)
+        return
+    elif result != V1_OK:
+        raise_panic(tag, 'unexpected click result from session server')
+
+    ws_send(NULL + V1_EVENT_OK)
+    ws_send(NULL + V1_EVENT_NONCE_BUFFER_SIZE_PFX + str(clicker_nonce_buff_size).encode('ascii'))
+
+    do_clicker_loop_v1(tag, ident, poll)
+
+
 def do_socket_v1(tag, env, poll):
-    # poll will ignore the event and wait 500 ms if the client has already sent the action
     action = uwsgi.websocket_recv_nb()
     if len(action) == 0:
         events = poll.poll(500)     # these should be sent in rapid succession
@@ -276,9 +367,19 @@ def do_socket_v1(tag, env, poll):
 
         do_resume_init_v1(tag, ident)
 
+    elif action.startswith(V1_EVENT_CLICKER_PFX):
+        tag += ('clicker',)
+        uuid_s = parse_uuid_from_client(tag, action, V1_EVENT_CLICKER_PFX, NULL)
+        if uuid_s is None:
+            return
+        tag += (uuid_s,)
+        ident = uuid_s.bytes
+
+        do_clicker_init_v1(tag, ident, poll)
+
     else:
         # no
-        Log.d(tag, 'unknown action sent by client')
+        Log.d(tag, 'unknown action sent by client:', action)
 
 
 def do_socket(tag, env):
@@ -472,6 +573,8 @@ def load_config():
     global poll_time
     global ws_poll_time
     global cors_origin_header_value
+    global clicker_nonce_buff_size
+    global clicker_inactivity_timeout
 
     config = read_config()
     if config is None:
@@ -495,6 +598,13 @@ def load_config():
 
     cors_origin_header_value = config.get('cors_origin_header_value', DEFAULT_CORS_ORIGIN_HEADER_VALUE)
 
+    clicker_nonce_buff_size = config.get('clicker_nonce_buffer_size', DEFAULT_CLICKER_NONCE_BUFFER_SIZE)
+    if clicker_nonce_buff_size > 254:
+        Log.wtf(('load_config()',), 'clicker_nonce_buff_size SHOULD NOT BE GREATER THAN 254!!! You will drop events. This is your warning, fix your config!')
+
+    clicker_inactivity_timeout = config.get('clicker_inactivity_timeout', DEFAULT_CLICKER_INACTIVITY_TIMEOUT)
+
+
 # config vars
 global session_server_timeout
 global session_server_socket
@@ -507,6 +617,8 @@ global session_queue_ttl
 global poll_time
 global ws_poll_time
 global cors_origin_header_value
+global clicker_nonce_buff_size
+global clicker_inactivity_timeout
 listener_threads = []
 sender_threads = []
 
