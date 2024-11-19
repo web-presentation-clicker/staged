@@ -91,10 +91,16 @@ body{
 }
 
 .crypto-wallet{
-    display: block;
+    display: flex;
+    justify-content: center;
 }
 
 .crypto-wallet p{
     font-size: 1em;
     text-align: center;
+    padding: 3em;
+    background-color: #FFFFFF;
+    width: fit-content;
+    border: 2px solid #000;
+    border-radius: 2%;
 }
