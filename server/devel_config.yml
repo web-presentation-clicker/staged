@@ -6,7 +6,7 @@
 # unix socket that the session server listens from.
 session_server_socket: '/tmp/aaaaaaaasock'
 # timeout in seconds for communications between the session server and the uwsgi app.
-# this should be low, since the session server is supposed to be fast.
+# this should be low to avoid slow events at peak server capacity.
 session_server_timeout: 5
 
 # use ansi colors in logs.
@@ -62,7 +62,7 @@ listener_threads: 4
 # maximum number of commands in the command queue before new commands are rejected.
 # setting this too low will keep the server responsive, but may drop click events.
 # setting this too high may increase latency under heavy load, but increase the user capacity.
-cmd_queue_size: 20
+cmd_queue_size: 200
 
 # maximum number of events in the event queue for a websocket before new events are rejected.
 # setting this too low is better than too high.
@@ -97,23 +97,19 @@ cors_origin_header_value: 'http://localhost:5500'
 # the maximum number of events in the event queue PER CONNECTED LISTENER before new ones are rejected.
 # this is per listener connection, so it multiplies for the listener count for every uwsgi process for every
 # uwsgi instance currently connected to the session server.
-event_queue_size: 20
+event_queue_size: 300
 
 # interval in seconds at which the maintenance thread should execute.
 # the maintenance thread is currently just responsible for expiring inactive sessions.
-maintenance_interval: 30
-
-# interval in seconds at which to ping the uwsgi app to ensure the client is still connected.
-# if this ping succeeds, the session activity timestamp is updated.
-# too small of a value will cause unnecessary load,
-# too large of a value may reduce the inactivity grace period.
-ping_interval: 30
+maintenance_interval: 30    # for normal testing and stress-tests
+#maintenance_interval: 5    # for session expiration testing
 
 # time threshold in seconds from the last contact with the presenting device at which the maintenance thread will
 # consider a session inactive and expire it.
 # too low may be annoying for users,
 # too high may enable denial of service attacks by making a bunch of sessions
-session_timeout: 300
+session_timeout: 300      # for normal testing and stress-tests
+#session_timeout: 2       # for session expiration testing
 
 # export metrics via prometheus (requires restart)
 prometheus:

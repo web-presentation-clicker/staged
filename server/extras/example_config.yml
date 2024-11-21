@@ -1,12 +1,12 @@
 # sample config file. it's shared between the session server and the uwsgi app
-# todo: update this
+
 
 # ===================== common =====================
 
-# unix socket that the session server listens from. (requires restart)
+# unix domain socket that the session server listens from. (requires restart)
 session_server_socket: '/run/staged/session.socket'
 # timeout in seconds for communications between the session server and the uwsgi app.
-# this should be low, since the session server is supposed to be fast.
+# this should be low to avoid slow events at peak server capacity.
 session_server_timeout: 5
 
 # use ansi colors in logs.
@@ -21,6 +21,25 @@ ansi_logging: true
 # 0 = just errors caused by potential bugs
 # -1 = silence
 log_level: 3
+
+# time in seconds that connection pools should poll the queue/socket for before checking
+# the connection health.
+#
+# setting this low is better for testing or low user counts, as it will reduce the chance for
+# users to get hit with an "internal server error" after one of the services restarts.
+# if everything is set in stone, and you're not restarting anything, it's safe to set this a bit
+# higher to reduce idle load.
+poll_time: 10
+
+# queue ttl parameters.
+# the time to live (in seconds) for various types of events/commands to live in the queue before
+# they are auto-rejected by the connection pool.
+#
+# setting these higher will obviously allow longer latency and increase server capacity, but
+# don't set them too high. imagine you're a user, you click and nothing happens, but 20 seconds later
+# after you give up it finally goes through and messes up your presentation. that would be pretty annoying.
+click_queue_ttl: 5
+session_queue_ttl: 7
 
 
 # ===================== uwsgi app =====================
@@ -40,18 +59,49 @@ log_level: 3
 sender_threads: 4
 listener_threads: 4
 
+# maximum number of commands in the command queue before new commands are rejected.
+# setting this too low will keep the server responsive, but may drop click events.
+# setting this too high may increase latency under heavy load, but increase the user capacity.
+cmd_queue_size: 200
+
+# maximum number of events in the event queue for a websocket before new events are rejected.
+# setting this too low is better than too high.
+# normally, the user shouldn't be clicking fast enough to populate more than 2 events in the queue,
+# but high server load may change that.
+websocket_queue_size: 4
+
+# poll_time but for the presenter's websocket loop.
+# this may need to remain low, as this is the interval at which the websocket connection status is checked, and
+# websocket commands are read.
+# setting this too high will increase the time that these loops remain running after the websocket disconnects,
+# and increase websocket command latency
+websocket_poll_time: 5
+
+# maximum amount of time in milliseconds that the clicker socket connection will stay open without the clicker
+# sending anything. this should be higher than 20 seconds, since the clicker pings every 20 seconds
+clicker_inactivity_timeout: 60000
+
+# buffer size for nonces for clicker socket
+# this number is reported to the clicker, and specifies how many unique nonce values can be sent before the first
+# nonce is accepted again. making this greater than 254 is guaranteed to break everything because there are only 255
+# possible nonce values and NULL is reserved
+clicker_nonce_buffer_size: 5
+
+# CORS header value
+# this is primarily here for development purposes. you should preferably define headers in your nginx config.
+# an empty value sends no cors origin header (default)
+#cors_origin_header_value: ''
 
 # ===================== session server =====================
+
+# the maximum number of events in the event queue PER CONNECTED LISTENER before new ones are rejected.
+# this is per listener connection, so it multiplies for the listener count for every uwsgi process for every
+# uwsgi instance currently connected to the session server.
+event_queue_size: 300
 
 # interval in seconds at which the maintenance thread should execute.
 # the maintenance thread is currently just responsible for expiring inactive sessions.
 maintenance_interval: 30
-
-# interval in seconds at which to ping the uwsgi app to ensure the client is still connected.
-# if this ping succeeds, the session activity timestamp is updated.
-# too small of a value will cause unnecessary load,
-# too large of a value may reduce the inactivity grace period.
-ping_interval: 30
 
 # time threshold in seconds from the last contact with the presenting device at which the maintenance thread will
 # consider a session inactive and expire it.
@@ -60,7 +110,7 @@ ping_interval: 30
 session_timeout: 300
 
 # export metrics via prometheus (requires restart)
-prometheus:
-  export: True
-  port: 8000
-  addr: 127.0.0.1
+#prometheus:
+#  export: True
+#  port: 8000
+#  addr: 127.0.0.1
