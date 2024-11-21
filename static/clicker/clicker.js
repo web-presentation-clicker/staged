@@ -1,6 +1,6 @@
 window.oncontextmenu = (_) => false;
 
-const baseURL = 'https://on-stage.click';
+const baseURL = '';
 const params = new URLSearchParams(location.search);
 const uuid_r = params.get('s');
 const prev = document.getElementById('previous');
