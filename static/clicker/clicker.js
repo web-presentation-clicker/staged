@@ -190,6 +190,7 @@ function show_blocking_modal(loading, title, message=null, show_reconnect=false)
     set_hidden(modal.wheel, !loading);
     set_hidden(modal.reconnect, !show_reconnect);
 
+    blocking = true;
     open_modal();
 }
 
