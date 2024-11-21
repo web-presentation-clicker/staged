@@ -1,5 +1,5 @@
 [Unit]
-Description=staged server
+Description=staged session server
 After=network-online.target
 
 [Service]
@@ -9,14 +9,10 @@ RuntimeDirectory=staged
 RuntimeDirectoryPreserve=yes
 WorkingDirectory=/opt/staged/app
 Environment="LC_ALL=C.UTF-8"
-ExecStart=/opt/staged/venv/bin/uwsgi --ini /opt/staged/staged.ini
+ExecStart=/opt/staged/venv/bin/python -u /opt/staged/app/sessionserver.py
 Restart=on-failure
-KillSignal=SIGKILL
+KillSignal=SIGINT
 
-# increase file descriptor limit
-LimitNOFILE=2000000:9000000
-
-# hardening
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict

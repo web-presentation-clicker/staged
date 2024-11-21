@@ -4,8 +4,21 @@ server {
 
     server_name your-domain.tld;
 
+    # static files
+    location / {
+        root /var/www/staged;
+        index index.html;
+        try_files $uri $uri/ =404;
+    }
+
     # staged running on unix socket
     location /api {
+        uwsgi_pass unix:///run/staged/staged.socket;
+        include uwsgi_params;
+    }
+
+    # short(er) qr code links
+    location ~* "^\/[^\/]{22}$" {
         uwsgi_pass unix:///run/staged/staged.socket;
         include uwsgi_params;
     }
