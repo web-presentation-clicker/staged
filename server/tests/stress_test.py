@@ -23,7 +23,7 @@ for ev in CLICK_EVENTS:
 def loop(s_test):
     try:
         while not die:
-            status = s_test.c.click_blocking(EVENT_HELLO)
+            status = s_test.c.click_blocking(EVENT_HELLO, 1.0)
             if status != EVENT_OK:
                 raise Exception('expected status "ok" for hello, got: %s' % str(status))
             event = s_test.p.pop(5)
