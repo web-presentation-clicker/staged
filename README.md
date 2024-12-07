@@ -10,5 +10,5 @@ The source code for the extension is available [here](https://github.com/web-pre
 
 To host an instance of staged, follow [these instructions](documentation/install_staged.md).
 
-Support for using third-party instances with the existing extension will be added soon.
+To use your instance with the official extension, click the logo in the extension's panel 5 times and enter the hostname of your server. You can also include a path if it's not hosted on the root of your domain.
 
