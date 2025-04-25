@@ -79,7 +79,7 @@ Find the latest release tarball [on the releases page](https://github.com/web-pr
 mkdir ~/downloaded
 cd ~/downloaded
 
-curl https://github.com/whateverthefuck(changethisplaceholdertextdumbass) -Lo staged.tar.gz
+curl https://github.com/web-presentation-clicker/staged/releases/download/<VERSION CODE>/staged.tar.gz -Lo staged.tar.gz
 
 tar -xvf staged.tar.gz
 rm staged.tar.gz
@@ -240,7 +240,7 @@ mkdir -p ~/downloaded
 rm -rf ~/downloaded/*
 cd ~/downloaded
 
-curl https://github.com/whateverthefuck(changethisplaceholdertextdumbass) -Lo staged.tar.gz
+curl https://github.com/web-presentation-clicker/staged/releases/download/<VERSION CODE>/staged.tar.gz -Lo staged.tar.gz
 
 tar -xvf staged.tar.gz
 rm staged.tar.gz
